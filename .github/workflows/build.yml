@@ -181,9 +181,34 @@ jobs:
                   web.addJavascriptInterface(Bridge(), "Android")
                   setContentView(web)
                   web.loadUrl("file:///android_asset/index.html")
+                  if (intent?.getBooleanExtra("pickForQueue", false) == true) {
+                      intent.removeExtra("pickForQueue")
+                      web.post { openPicker(8) }
+                  }
                   if (Build.VERSION.SDK_INT >= 33) {
                       requestPermissions(arrayOf("android.permission.POST_NOTIFICATIONS"), 1)
                   }
+              }
+
+              override fun onNewIntent(intent: Intent?) {
+                  super.onNewIntent(intent)
+                  setIntent(intent)
+                  if (intent?.getBooleanExtra("pickForQueue", false) == true) {
+                      intent.removeExtra("pickForQueue")
+                      web.post { openPicker(8) }
+                  }
+              }
+
+              private fun openPicker(requestCode: Int) {
+                  val i = Intent(Intent.ACTION_OPEN_DOCUMENT)
+                  i.addCategory(Intent.CATEGORY_OPENABLE)
+                  i.type = "audio/*"
+                  i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+                  i.addFlags(
+                      Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                      Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+                  )
+                  startActivityForResult(i, requestCode)
               }
 
               override fun onBackPressed() {
@@ -208,7 +233,7 @@ jobs:
               @Deprecated("Deprecated in Android")
               override fun onActivityResult(rc: Int, res: Int, d: Intent?) {
                   super.onActivityResult(rc, res, d)
-                  if (rc == 7 && res == RESULT_OK && d != null) {
+                  if ((rc == 7 || rc == 8) && res == RESULT_OK && d != null) {
                       val uris = ArrayList<Uri>()
                       val cd = d.clipData
                       if (cd != null) {
@@ -223,24 +248,18 @@ jobs:
                           } catch (_: Exception) {}
                           arr.put(JSONObject().put("uri", u.toString()).put("name", nameOf(u)))
                       }
-                      web.evaluateJavascript("onPicked(" + arr.toString() + ")", null)
+                      if (rc == 8) {
+                          PlayerService.inst?.appendTracks(arr)
+                      } else {
+                          web.evaluateJavascript("onPicked(" + arr.toString() + ")", null)
+                      }
                   }
               }
 
               inner class Bridge {
                   @JavascriptInterface
                   fun pick() {
-                      runOnUiThread {
-                          val i = Intent(Intent.ACTION_OPEN_DOCUMENT)
-                          i.addCategory(Intent.CATEGORY_OPENABLE)
-                          i.type = "audio/*"
-                          i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
-                          i.addFlags(
-                              Intent.FLAG_GRANT_READ_URI_PERMISSION or
-                              Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
-                          )
-                          startActivityForResult(i, 7)
-                      }
+                      runOnUiThread { openPicker(7) }
                   }
 
                   @JavascriptInterface
@@ -294,6 +313,7 @@ jobs:
           import android.graphics.PixelFormat
           import android.graphics.RectF
           import android.graphics.Typeface
+          import android.graphics.drawable.GradientDrawable
           import android.media.MediaPlayer
           import android.net.Uri
           import android.os.Handler
@@ -302,7 +322,12 @@ jobs:
           import android.view.Gravity
           import android.view.MotionEvent
           import android.view.View
+          import android.view.ViewGroup
           import android.view.WindowManager
+          import android.widget.Button
+          import android.widget.LinearLayout
+          import android.widget.ScrollView
+          import android.widget.TextView
           import android.widget.Toast
           import org.json.JSONArray
           import org.json.JSONObject
@@ -327,6 +352,7 @@ jobs:
               var loopA = -1
               var loopB = -1
               private var bubble: BubbleView? = null
+              private var playlistPanel: View? = null
               private val h = Handler(Looper.getMainLooper())
 
               private val tick = object : Runnable {
@@ -416,6 +442,7 @@ jobs:
                   val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
                   nm.notify(1, notif(curName))
                   ensureBubble()
+                  refreshPlaylistPanel()
               }
 
               fun pos(): Int = try { if (ready) mp?.currentPosition ?: 0 else 0 } catch (_: Exception) { 0 }
@@ -485,6 +512,177 @@ jobs:
                   bubble?.invalidate()
               }
 
+
+              fun appendTracks(items: JSONArray) {
+                  val wasEmpty = queue.length() == 0
+                  for (i in 0 until items.length()) {
+                      val item = items.optJSONObject(i) ?: continue
+                      queue.put(JSONObject().put("uri", item.optString("uri"))
+                          .put("name", item.optString("name", "صوتية")))
+                  }
+                  Toast.makeText(this, "أُضيفت ${items.length()} صوتية إلى قائمة التشغيل", Toast.LENGTH_SHORT).show()
+                  if (wasEmpty && queue.length() > 0) playAt(0, 0)
+                  refreshPlaylistPanel()
+                  bubble?.invalidate()
+              }
+
+              fun moveTrack(from: Int, to: Int) {
+                  if (from !in 0 until queue.length() || to !in 0 until queue.length()) return
+                  if (from == to) return
+                  val arr = ArrayList<JSONObject>()
+                  for (i in 0 until queue.length()) arr.add(queue.getJSONObject(i))
+                  val item = arr.removeAt(from)
+                  arr.add(to, item)
+                  queue = JSONArray()
+                  arr.forEach { queue.put(it) }
+                  idx = when {
+                      idx == from -> to
+                      from < idx && to >= idx -> idx - 1
+                      from > idx && to <= idx -> idx + 1
+                      else -> idx
+                  }
+                  refreshPlaylistPanel()
+                  bubble?.invalidate()
+              }
+
+              fun removeTrack(at: Int) {
+                  if (at !in 0 until queue.length()) return
+                  val removingCurrent = at == idx
+                  val arr = ArrayList<JSONObject>()
+                  for (i in 0 until queue.length()) if (i != at) arr.add(queue.getJSONObject(i))
+                  queue = JSONArray()
+                  arr.forEach { queue.put(it) }
+                  if (queue.length() == 0) {
+                      idx = 0
+                      try { mp?.release() } catch (_: Exception) {}
+                      mp = null
+                      ready = false
+                      curUri = ""
+                      curName = ""
+                      cancelAB(false)
+                      refreshPlaylistPanel()
+                      bubble?.invalidate()
+                      return
+                  }
+                  if (removingCurrent) {
+                      idx = at.coerceAtMost(queue.length() - 1)
+                      playAt(idx, 0)
+                  } else {
+                      if (at < idx) idx--
+                      refreshPlaylistPanel()
+                  }
+                  bubble?.invalidate()
+              }
+
+              fun requestAddTrack() {
+                  hidePlaylistPanel()
+                  try {
+                      val i = Intent(this, MainActivity::class.java)
+                      i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                      i.putExtra("pickForQueue", true)
+                      startActivity(i)
+                  } catch (_: Exception) {
+                      Toast.makeText(this, "افتح التطبيق لإضافة صوتية", Toast.LENGTH_SHORT).show()
+                  }
+              }
+
+              fun showPlaylistPanel() {
+                  if (queue.length() == 0) {
+                      hidePlaylistPanel()
+                      Toast.makeText(this, "قائمة التشغيل فارغة", Toast.LENGTH_SHORT).show()
+                      return
+                  }
+                  val root = LinearLayout(this)
+                  root.orientation = LinearLayout.VERTICAL
+                  root.setPadding(dp(12), dp(10), dp(12), dp(10))
+                  root.background = GradientDrawable().apply {
+                      setColor(Color.rgb(14, 34, 51))
+                      cornerRadius = dp(20).toFloat()
+                      setStroke(dp(1), Color.rgb(76, 194, 232))
+                  }
+                  val title = TextView(this).apply {
+                      text = "قائمة التشغيل  •  ${queue.length()} ملفات"
+                      setTextColor(Color.WHITE)
+                      textSize = 16f
+                      typeface = Typeface.DEFAULT_BOLD
+                      gravity = Gravity.CENTER_VERTICAL
+                      setPadding(dp(4), 0, dp(4), dp(8))
+                  }
+                  root.addView(title, LinearLayout.LayoutParams(-1, dp(36)))
+                  val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+                  val add = panelButton("＋ إضافة", "#187a9f") { requestAddTrack() }
+                  val close = panelButton("إغلاق", "#344f63") { hidePlaylistPanel() }
+                  actions.addView(add, LinearLayout.LayoutParams(0, dp(42), 1f).apply { marginEnd = dp(6) })
+                  actions.addView(close, LinearLayout.LayoutParams(0, dp(42), 1f))
+                  root.addView(actions, LinearLayout.LayoutParams(-1, dp(42)).apply { bottomMargin = dp(8) })
+                  val scroll = ScrollView(this)
+                  val list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+                  for (i in 0 until queue.length()) {
+                      val item = queue.optJSONObject(i) ?: continue
+                      val row = LinearLayout(this).apply {
+                          orientation = LinearLayout.HORIZONTAL
+                          gravity = Gravity.CENTER_VERTICAL
+                          setPadding(dp(6), dp(4), dp(6), dp(4))
+                          background = GradientDrawable().apply {
+                              setColor(if (i == idx) Color.rgb(35, 91, 119) else Color.rgb(21, 50, 74))
+                              cornerRadius = dp(12).toFloat()
+                          }
+                      }
+                      val label = TextView(this).apply {
+                          text = (if (i == idx) "▶  " else "") + (i + 1) + ". " + item.optString("name", "صوتية")
+                          setTextColor(Color.WHITE)
+                          textSize = 12f
+                          maxLines = 2
+                          gravity = Gravity.CENTER_VERTICAL
+                          setPadding(dp(4), 0, dp(4), 0)
+                      }
+                      row.addView(label, LinearLayout.LayoutParams(0, dp(48), 1f))
+                      row.addView(panelButton("↑", "#315b76") { moveTrack(i, i - 1) }, LinearLayout.LayoutParams(dp(34), dp(38)).apply { marginStart = dp(3) })
+                      row.addView(panelButton("↓", "#315b76") { moveTrack(i, i + 1) }, LinearLayout.LayoutParams(dp(34), dp(38)).apply { marginStart = dp(3) })
+                      row.addView(panelButton("×", "#9d3c45") { removeTrack(i) }, LinearLayout.LayoutParams(dp(34), dp(38)).apply { marginStart = dp(3) })
+                      list.addView(row, LinearLayout.LayoutParams(-1, dp(56)).apply { bottomMargin = dp(5) })
+                  }
+                  scroll.addView(list)
+                  root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+                  hidePlaylistPanel()
+                  playlistPanel = root
+                  val bp = bubble?.lp
+                  val screenW = resources.displayMetrics.widthPixels
+                  val params = WindowManager.LayoutParams(
+                      dp(300), dp(380),
+                      WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                      WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+                      PixelFormat.TRANSLUCENT
+                  )
+                  params.gravity = Gravity.TOP or Gravity.START
+                  params.x = ((bp?.x ?: (screenW - dp(170))) - dp(145)).coerceAtLeast(dp(4))
+                  params.y = (((bp?.y ?: dp(150)) + dp(145)).coerceAtMost(resources.displayMetrics.heightPixels - dp(390))).coerceAtLeast(dp(4))
+                  try { wm.addView(root, params) } catch (_: Exception) { playlistPanel = null }
+              }
+
+              private fun panelButton(text: String, color: String, action: () -> Unit): Button =
+                  Button(this).apply {
+                      this.text = text
+                      textSize = 11f
+                      isAllCaps = false
+                      setTextColor(Color.WHITE)
+                      background = GradientDrawable().apply {
+                          setColor(Color.parseColor(color))
+                          cornerRadius = dp(10).toFloat()
+                      }
+                      setPadding(dp(2), 0, dp(2), 0)
+                      setOnClickListener { action() }
+                  }
+
+              fun hidePlaylistPanel() {
+                  playlistPanel?.let { try { wm.removeView(it) } catch (_: Exception) {} }
+                  playlistPanel = null
+              }
+
+              private fun refreshPlaylistPanel() {
+                  if (playlistPanel != null) showPlaylistPanel()
+              }
+
               fun stateJson(): String = try {
                   JSONObject()
                       .put("uri", curUri)
@@ -516,6 +714,7 @@ jobs:
               }
 
               fun closeAll() {
+                  hidePlaylistPanel()
                   bubble?.let { try { wm.removeView(it) } catch (_: Exception) {} }
                   bubble = null
                   h.removeCallbacksAndMessages(null)
@@ -542,6 +741,7 @@ jobs:
               private var moved = false
               private var scrub = false
               private var scrubFrac = 0f
+              private var scrubLastAngle = 0f
 
               override fun onMeasure(w: Int, h: Int) {
                   setMeasuredDimension(sz.toInt(), sz.toInt())
@@ -643,6 +843,12 @@ jobs:
                   }
 
                   pt.color = Color.parseColor("#0e2233")
+                  cv.drawCircle(15*d, 15*d, 11*d, pt)
+                  pt.color = Color.WHITE
+                  pt.textSize = 13*d
+                  cv.drawText("≡", 15*d, 19*d, pt)
+
+                  pt.color = Color.parseColor("#0e2233")
                   cv.drawCircle(sz-15*d, 15*d, 11*d, pt)
                   pt.color = Color.WHITE
                   pt.textSize = 13*d
@@ -660,12 +866,13 @@ jobs:
                   }
               }
 
-              private fun fracAt(x: Float, y: Float): Float {
+              private fun angleAt(x: Float, y: Float): Float {
                   var deg = Math.toDegrees(
                       Math.atan2((y-c).toDouble(), (x-c).toDouble())
-                  ) + 90.0
-                  if (deg < 0) deg += 360.0
-                  return (deg/360.0).toFloat().coerceIn(0f, 1f)
+                  ).toFloat() + 90f
+                  if (deg < 0f) deg += 360f
+                  if (deg >= 360f) deg -= 360f
+                  return deg
               }
 
               private fun hit(x: Float, y: Float): Int {
@@ -673,6 +880,7 @@ jobs:
                       Math.hypot((x-ax).toDouble(), (y-ay).toDouble()).toFloat()
 
                   if (dist(sz-15*d, 15*d) < 17*d) return 4
+                  if (dist(15*d, 15*d) < 17*d) return 5
                   val by = sz-20*d
                   if (dist(c-37*d, by) < 18*d) return 7
                   if (dist(c, by) < 18*d) return 8
@@ -699,14 +907,22 @@ jobs:
                           zone = hit(e.x, e.y)
                           moved = false
                           scrub = zone == 6
-                          if (scrub) scrubFrac = fracAt(e.x, e.y)
+                          if (scrub) {
+                              scrubLastAngle = angleAt(e.x, e.y)
+                              scrubFrac = scrubLastAngle / 360f
+                          }
                           invalidate()
                           return true
                       }
 
                       MotionEvent.ACTION_MOVE -> {
                           if (scrub) {
-                              scrubFrac = fracAt(e.x, e.y)
+                              val nowAngle = angleAt(e.x, e.y)
+                              var delta = nowAngle - scrubLastAngle
+                              if (delta > 180f) delta -= 360f
+                              if (delta < -180f) delta += 360f
+                              scrubFrac = (scrubFrac + delta / 360f).coerceIn(0f, 1f)
+                              scrubLastAngle = nowAngle
                               invalidate()
                           } else {
                               val dx = e.rawX-downX
@@ -735,6 +951,7 @@ jobs:
                                   2 -> svc.seekBy(-15000)
                                   3 -> svc.seekBy(15000)
                                   4 -> svc.closeAll()
+                                  5 -> svc.showPlaylistPanel()
                                   7 -> svc.setA()
                                   8 -> svc.setB()
                                   9 -> svc.cancelAB()
