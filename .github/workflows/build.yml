@@ -771,12 +771,14 @@ jobs:
           import android.content.Context
           import android.content.Intent
           import android.content.res.ColorStateList
+          import android.graphics.BitmapFactory
           import android.graphics.Canvas
           import android.graphics.Color
           import android.graphics.LinearGradient
           import android.graphics.Paint
           import android.graphics.Path
           import android.graphics.PixelFormat
+          import android.graphics.Rect
           import android.graphics.RectF
           import android.graphics.Shader
           import android.graphics.SweepGradient
@@ -786,6 +788,7 @@ jobs:
           import android.net.Uri
           import android.os.Handler
           import android.os.IBinder
+          import android.os.SystemClock
           import android.os.Looper
           import android.view.Gravity
           import android.view.MotionEvent
@@ -808,13 +811,20 @@ jobs:
           }
 
           class PlayerService : Service() {
-              companion object { var inst: PlayerService? = null }
+              companion object {
+                  var inst: PlayerService? = null
+                  const val BS = 0.86f
+              }
 
               lateinit var wm: WindowManager
               private var mp: MediaPlayer? = null
               private var ready = false
               private var playbackSpeed = 1.0f
               private var speedPanel: View? = null
+              private var timerPanel: View? = null
+              private var timerValue: TextView? = null
+              private var timerEnd = 0L
+              private var timerEot = false
               private val prefs by lazy { getSharedPreferences("fp", Context.MODE_PRIVATE) }
               private var queue = JSONArray()
               private var idx = 0
@@ -825,6 +835,7 @@ jobs:
               var loopA = -1
               var loopB = -1
               private var bubble: BubbleView? = null
+              private var mini: MiniView? = null
               private var playlistPanel: View? = null
               private val h = Handler(Looper.getMainLooper())
 
@@ -839,6 +850,8 @@ jobs:
                           }
                           bubble?.invalidate()
                       } catch (_: Exception) {}
+                      checkTimer()
+                      mini?.invalidate()
                       h.postDelayed(this, 100)
                   }
               }
@@ -858,6 +871,7 @@ jobs:
               }
 
               override fun onDestroy() {
+                  hideTimerPanel()
                   hideSpeedPanel()
                   h.removeCallbacksAndMessages(null)
                   try { mp?.release() } catch (_: Exception) {}
@@ -904,7 +918,13 @@ jobs:
                           bubble?.invalidate()
                       }
                       player.setOnCompletionListener {
-                          if (idx + 1 < queue.length()) playAt(idx + 1, 0)
+                          if (timerEot) {
+                              timerEot = false
+                              Toast.makeText(this, "انتهت الصوتية، تم إيقاف التشغيل", Toast.LENGTH_LONG).show()
+                              bubble?.invalidate()
+                          } else if (idx + 1 < queue.length()) {
+                              playAt(idx + 1, 0)
+                          }
                       }
                       player.setOnErrorListener { _, _, _ ->
                           ready = false
@@ -951,6 +971,7 @@ jobs:
               fun showSpeedPicker() {
                   if (speedPanel != null) { hideSpeedPanel(); return }
                   hidePlaylistPanel()
+                  hideTimerPanel()
                   val root = LinearLayout(this).apply {
                       orientation = LinearLayout.VERTICAL
                       setPadding(dp(14), dp(12), dp(14), dp(12))
@@ -1039,8 +1060,8 @@ jobs:
                       PixelFormat.TRANSLUCENT
                   )
                   params.gravity = Gravity.TOP or Gravity.START
-                  params.x = ((bp?.x ?: (screenW - dp(200))) + dp(90) - dp(145)).coerceIn(dp(4), (screenW - dp(294)).coerceAtLeast(dp(4)))
-                  params.y = ((bp?.y ?: dp(150)) + dp(210)).coerceAtMost(screenH - dp(260)).coerceAtLeast(dp(4))
+                  params.x = ((bp?.x ?: (screenW - sc(200f))) + sc(90f) - dp(145)).coerceIn(dp(4), (screenW - dp(294)).coerceAtLeast(dp(4)))
+                  params.y = ((bp?.y ?: dp(150)) + sc(206f)).coerceAtMost(screenH - dp(260)).coerceAtLeast(dp(4))
                   try { wm.addView(root, params) } catch (_: Exception) { speedPanel = null }
               }
 
@@ -1192,6 +1213,7 @@ jobs:
                       return
                   }
                   hideSpeedPanel()
+                  hideTimerPanel()
                   val root = LinearLayout(this)
                   root.orientation = LinearLayout.VERTICAL
                   root.setPadding(dp(12), dp(10), dp(12), dp(10))
@@ -1255,8 +1277,8 @@ jobs:
                       PixelFormat.TRANSLUCENT
                   )
                   params.gravity = Gravity.TOP or Gravity.START
-                  params.x = ((bp?.x ?: (screenW - dp(200))) + dp(90) - dp(150)).coerceIn(dp(4), (screenW - dp(304)).coerceAtLeast(dp(4)))
-                  params.y = (((bp?.y ?: dp(150)) + dp(210)).coerceAtMost(resources.displayMetrics.heightPixels - dp(390))).coerceAtLeast(dp(4))
+                  params.x = ((bp?.x ?: (screenW - sc(200f))) + sc(90f) - dp(150)).coerceIn(dp(4), (screenW - dp(304)).coerceAtLeast(dp(4)))
+                  params.y = (((bp?.y ?: dp(150)) + sc(206f)).coerceAtMost(resources.displayMetrics.heightPixels - dp(390))).coerceAtLeast(dp(4))
                   try { wm.addView(root, params) } catch (_: Exception) { playlistPanel = null }
               }
 
@@ -1300,20 +1322,197 @@ jobs:
                   if (bubble != null) return
                   val v = BubbleView(this, this)
                   val p = WindowManager.LayoutParams(
-                      dp(180), dp(204),
+                      sc(180f), sc(200f),
                       WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
                       WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
                       PixelFormat.TRANSLUCENT
                   )
                   p.gravity = Gravity.TOP or Gravity.START
-                  p.x = resources.displayMetrics.widthPixels - dp(200)
+                  p.x = resources.displayMetrics.widthPixels - sc(200f)
                   p.y = dp(150)
                   v.lp = p
                   wm.addView(v, p)
                   bubble = v
               }
 
+              private fun checkTimer() {
+                  if (timerEnd > 0L && SystemClock.elapsedRealtime() >= timerEnd) {
+                      timerEnd = 0L
+                      timerEot = false
+                      try { mp?.pause() } catch (_: Exception) {}
+                      Toast.makeText(this, "انتهى المؤقت، تم إيقاف التشغيل", Toast.LENGTH_LONG).show()
+                      bubble?.invalidate()
+                  }
+                  timerValue?.text = timerStatus()
+              }
+
+              fun timerLeftMs(): Long =
+                  if (timerEnd > 0L) (timerEnd - SystemClock.elapsedRealtime()).coerceAtLeast(0L) else 0L
+
+              fun timerActive(): Boolean = timerEnd > 0L || timerEot
+
+              fun timerButtonLabel(): String =
+                  if (timerEnd > 0L) Math.max(1L, (timerLeftMs() + 59999L) / 60000L).toString() else "■"
+
+              fun timerStatus(): String = when {
+                  timerEnd > 0L -> fmt(timerLeftMs().toInt())
+                  timerEot -> "عند نهاية الصوتية"
+                  else -> "غير مفعّل"
+              }
+
+              fun setTimer(min: Int) {
+                  timerEot = false
+                  timerEnd = SystemClock.elapsedRealtime() + min * 60_000L
+                  Toast.makeText(this, "سيتوقف التشغيل بعد $min دقيقة", Toast.LENGTH_SHORT).show()
+                  bubble?.invalidate()
+              }
+
+              fun setTimerEndOfTrack() {
+                  timerEnd = 0L
+                  timerEot = true
+                  Toast.makeText(this, "سيتوقف التشغيل عند نهاية الصوتية", Toast.LENGTH_SHORT).show()
+                  bubble?.invalidate()
+              }
+
+              fun cancelTimer() {
+                  timerEnd = 0L
+                  timerEot = false
+                  bubble?.invalidate()
+              }
+
+              fun hideTimerPanel() {
+                  timerPanel?.let { try { wm.removeView(it) } catch (_: Exception) {} }
+                  timerPanel = null
+                  timerValue = null
+              }
+
+              fun showTimerPanel() {
+                  if (timerPanel != null) { hideTimerPanel(); return }
+                  hideSpeedPanel()
+                  hidePlaylistPanel()
+                  val root = LinearLayout(this).apply {
+                      orientation = LinearLayout.VERTICAL
+                      setPadding(dp(14), dp(12), dp(14), dp(12))
+                      background = GradientDrawable().apply {
+                          setColor(Color.argb(246, 15, 24, 53))
+                          cornerRadius = dp(22).toFloat()
+                          setStroke(dp(1), Color.argb(70, 120, 190, 255))
+                      }
+                  }
+                  val title = TextView(this).apply {
+                      text = "مؤقت الإيقاف"
+                      textSize = 13f
+                      gravity = Gravity.CENTER
+                      setTextColor(Color.rgb(159, 176, 220))
+                  }
+                  val value = TextView(this).apply {
+                      text = timerStatus()
+                      textSize = 26f
+                      typeface = Typeface.DEFAULT_BOLD
+                      gravity = Gravity.CENTER
+                      setTextColor(Color.rgb(92, 200, 255))
+                  }
+                  timerValue = value
+                  root.addView(title, LinearLayout.LayoutParams(-1, dp(22)))
+                  root.addView(value, LinearLayout.LayoutParams(-1, dp(44)))
+
+                  fun chipRow(vals: IntArray) {
+                      val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+                      for (m in vals) {
+                          row.addView(
+                              panelButton("$m د", "#2A3A78") { setTimer(m); value.text = timerStatus() },
+                              LinearLayout.LayoutParams(0, dp(40), 1f).apply { marginEnd = dp(4) }
+                          )
+                      }
+                      root.addView(row, LinearLayout.LayoutParams(-1, dp(40)).apply { topMargin = dp(6) })
+                  }
+                  chipRow(intArrayOf(5, 10, 15))
+                  chipRow(intArrayOf(30, 45, 60))
+                  root.addView(
+                      panelButton("عند نهاية الصوتية", "#8B5CF6") { setTimerEndOfTrack(); value.text = timerStatus() },
+                      LinearLayout.LayoutParams(-1, dp(40)).apply { topMargin = dp(6) }
+                  )
+                  val bottom = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+                  bottom.addView(
+                      panelButton("إلغاء المؤقت", "#D6455D") { cancelTimer(); value.text = timerStatus() },
+                      LinearLayout.LayoutParams(0, dp(40), 1f).apply { marginEnd = dp(6) }
+                  )
+                  bottom.addView(
+                      panelButton("إغلاق", "#2A3566") { hideTimerPanel() },
+                      LinearLayout.LayoutParams(0, dp(40), 1f)
+                  )
+                  root.addView(bottom, LinearLayout.LayoutParams(-1, dp(40)).apply { topMargin = dp(8) })
+                  timerPanel = root
+
+                  val bp = bubble?.lp
+                  val screenW = resources.displayMetrics.widthPixels
+                  val screenH = resources.displayMetrics.heightPixels
+                  val params = WindowManager.LayoutParams(
+                      dp(280), WindowManager.LayoutParams.WRAP_CONTENT,
+                      WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                      WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                          WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+                      PixelFormat.TRANSLUCENT
+                  )
+                  params.gravity = Gravity.TOP or Gravity.START
+                  params.x = ((bp?.x ?: (screenW - sc(200f))) + sc(90f) - dp(140))
+                      .coerceIn(dp(4), (screenW - dp(284)).coerceAtLeast(dp(4)))
+                  params.y = ((bp?.y ?: dp(150)) + sc(206f)).coerceAtMost(screenH - dp(300)).coerceAtLeast(dp(4))
+                  try { wm.addView(root, params) } catch (_: Exception) { timerPanel = null; timerValue = null }
+              }
+
+              fun sc(v: Float): Int = (v * BS * resources.displayMetrics.density).toInt()
+
+              fun minimize() {
+                  val b = bubble ?: return
+                  if (mini != null) return
+                  val bp = b.lp ?: return
+                  hideSpeedPanel()
+                  hidePlaylistPanel()
+                  val ms = dp(64)
+                  val sw = resources.displayMetrics.widthPixels
+                  val sh = resources.displayMetrics.heightPixels
+                  val p = WindowManager.LayoutParams(
+                      ms, ms,
+                      WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                      WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+                      PixelFormat.TRANSLUCENT
+                  )
+                  p.gravity = Gravity.TOP or Gravity.START
+                  p.x = (bp.x + sc(90f) - dp(28)).coerceIn(0, (sw - ms).coerceAtLeast(0))
+                  p.y = (bp.y + sc(90f) - dp(28)).coerceIn(0, (sh - ms).coerceAtLeast(0))
+                  val v = MiniView(this, this)
+                  v.lp = p
+                  try { wm.addView(v, p) } catch (_: Exception) { return }
+                  mini = v
+                  b.visibility = View.GONE
+              }
+
+              fun restore() {
+                  val m = mini ?: return
+                  val mp = m.lp
+                  val b = bubble
+                  if (b != null && mp != null) {
+                      val bp = b.lp
+                      if (bp != null) {
+                          val sw = resources.displayMetrics.widthPixels
+                          val sh = resources.displayMetrics.heightPixels
+                          bp.x = (mp.x + dp(28) - sc(90f)).coerceIn(0, (sw - sc(180f)).coerceAtLeast(0))
+                          bp.y = (mp.y + dp(28) - sc(90f)).coerceIn(0, (sh - sc(200f)).coerceAtLeast(0))
+                          try { wm.updateViewLayout(b, bp) } catch (_: Exception) {}
+                      }
+                      b.visibility = View.VISIBLE
+                  }
+                  try { wm.removeView(m) } catch (_: Exception) {}
+                  mini = null
+              }
+
               fun closeAll() {
+                  hideTimerPanel()
+                  timerEnd = 0L
+                  timerEot = false
+                  mini?.let { try { wm.removeView(it) } catch (_: Exception) {} }
+                  mini = null
                   hideSpeedPanel()
                   hidePlaylistPanel()
                   bubble?.let { try { wm.removeView(it) } catch (_: Exception) {} }
@@ -1330,13 +1529,13 @@ jobs:
 
           class BubbleView(ctx: Context, private val svc: PlayerService) : View(ctx) {
               var lp: WindowManager.LayoutParams? = null
-              private val d = ctx.resources.displayMetrics.density
+              private val d = ctx.resources.displayMetrics.density * PlayerService.BS
               private val vw = 180f * d
-              private val vh = 204f * d
+              private val vh = 200f * d
               private val c = 90f * d
               private val ring = 54f * d
               private val pt = Paint(Paint.ANTI_ALIAS_FLAG)
-              private val byBtn = 165f * d
+              private val byBtn = 161f * d
               private var downX = 0f
               private var downY = 0f
               private var sx = 0
@@ -1383,13 +1582,11 @@ jobs:
                   val frac = if (scrub) scrubFrac else real
                   val shownMs = if (scrub && duration > 0) (scrubFrac * duration).toInt() else svc.pos()
 
-                  // مسار التايملاين
                   pt.style = Paint.Style.STROKE
                   pt.strokeWidth = 4*d
                   pt.color = Color.parseColor("#2A3A78")
                   cv.drawCircle(c, c, ring, pt)
 
-                  // التقدم بتدرج ألوان
                   pt.strokeCap = Paint.Cap.ROUND
                   pt.shader = SweepGradient(
                       c, c,
@@ -1421,7 +1618,6 @@ jobs:
                       6*d, pt
                   )
 
-                  // القرص الداخلي
                   pt.color = Color.parseColor("#18285E")
                   cv.drawCircle(c, c, 42*d, pt)
                   pt.style = Paint.Style.STROKE
@@ -1466,45 +1662,59 @@ jobs:
                       cv.drawText("A-B", c, c-28*d, pt)
                   }
 
-                  // زر القائمة (أعلى اليسار) وزر الإغلاق (أعلى اليمين)
+                  // أزرار الصف العلوي: قائمة، تصغير، إغلاق
                   pt.color = Color.parseColor("#1B2B5E")
-                  cv.drawCircle(16*d, 16*d, 12*d, pt)
-                  cv.drawCircle(vw-16*d, 16*d, 12*d, pt)
+                  cv.drawCircle(14*d, 14*d, 11*d, pt)
+                  cv.drawCircle(vw-41*d, 14*d, 10.5f*d, pt)
+                  cv.drawCircle(vw-14*d, 14*d, 11*d, pt)
                   pt.color = Color.WHITE
                   pt.textSize = 14*d
-                  cv.drawText("≡", 16*d, 21*d, pt)
-                  cv.drawText("×", vw-16*d, 21*d, pt)
+                  cv.drawText("≡", 14*d, 19*d, pt)
+                  cv.drawText("−", vw-41*d, 19*d, pt)
+                  cv.drawText("×", vw-14*d, 19*d, pt)
 
-                  // شارة السرعة (أعلى الوسط)
+                  // شارة السرعة
                   pt.shader = LinearGradient(
                       c-27*d, 0f, c+27*d, 0f,
                       Color.parseColor("#3DB8F5"), Color.parseColor("#8B5CF6"),
                       Shader.TileMode.CLAMP
                   )
-                  cv.drawRoundRect(RectF(c-27*d, 3*d, c+27*d, 25*d), 11*d, 11*d, pt)
+                  cv.drawRoundRect(RectF(c-27*d, 5*d, c+27*d, 27*d), 11*d, 11*d, pt)
                   pt.shader = null
                   pt.color = Color.WHITE
                   pt.textSize = 11*d
-                  cv.drawText(svc.playbackSpeedLabel(), c, 18*d, pt)
+                  cv.drawText(svc.playbackSpeedLabel(), c, 20*d, pt)
 
-                  // أزرار A و B وإلغاء (بعيدة عن التايملاين)
-                  button(cv, c-40*d, byBtn, "A", if (svc.markA >= 0) "#E2409F" else "#26356B")
-                  button(cv, c, byBtn, "B", if (svc.loopB >= 0) "#F5A524" else "#26356B")
-                  button(cv, c+40*d, byBtn, "×", if (svc.loopA >= 0) "#F0506E" else "#26356B")
+                  // A / B / إلغاء
+                  button(cv, c-57*d, byBtn, "A", if (svc.markA >= 0) "#E2409F" else "#26356B")
+                  button(cv, c-19*d, byBtn, "B", if (svc.loopB >= 0) "#F5A524" else "#26356B")
+                  button(cv, c+19*d, byBtn, "×", if (svc.loopA >= 0) "#F0506E" else "#26356B")
+                  val ta = svc.timerActive()
+                  button(cv, c+57*d, byBtn, if (ta) svc.timerButtonLabel() else "", if (ta) "#8B5CF6" else "#26356B")
+                  if (!ta) {
+                      val tx = c + 57*d
+                      pt.style = Paint.Style.STROKE
+                      pt.strokeWidth = 1.6f*d
+                      pt.color = Color.WHITE
+                      cv.drawCircle(tx, byBtn, 6*d, pt)
+                      cv.drawLine(tx, byBtn - 3.5f*d, tx, byBtn, pt)
+                      cv.drawLine(tx, byBtn, tx + 3*d, byBtn + 2*d, pt)
+                      pt.style = Paint.Style.FILL
+                  }
 
-                  // عداد موضع التشغيل: الحالي / الكلي
+                  // عداد موضع التشغيل
                   pt.style = Paint.Style.FILL
                   pt.color = Color.parseColor("#1B2B5E")
-                  cv.drawRoundRect(RectF(c-52*d, 182*d, c+52*d, 202*d), 10*d, 10*d, pt)
+                  cv.drawRoundRect(RectF(c-52*d, 178*d, c+52*d, 198*d), 10*d, 10*d, pt)
                   pt.style = Paint.Style.STROKE
                   pt.strokeWidth = 1*d
                   pt.color = Color.parseColor("#3C5BB0")
-                  cv.drawRoundRect(RectF(c-52*d, 182*d, c+52*d, 202*d), 10*d, 10*d, pt)
+                  cv.drawRoundRect(RectF(c-52*d, 178*d, c+52*d, 198*d), 10*d, 10*d, pt)
                   pt.style = Paint.Style.FILL
                   pt.color = if (scrub) Color.parseColor("#4CC3FF") else Color.WHITE
                   pt.textSize = 11*d
                   pt.typeface = Typeface.DEFAULT_BOLD
-                  cv.drawText(fmt(shownMs) + " / " + fmt(duration), c, 196*d, pt)
+                  cv.drawText(fmt(shownMs) + " / " + fmt(duration), c, 192*d, pt)
               }
 
               private fun angleAt(x: Float, y: Float): Float {
@@ -1520,12 +1730,14 @@ jobs:
                   fun dist(ax: Float, ay: Float): Float =
                       Math.hypot((x-ax).toDouble(), (y-ay).toDouble()).toFloat()
 
-                  if (dist(vw-16*d, 16*d) < 18*d) return 4
-                  if (dist(16*d, 16*d) < 18*d) return 5
-                  if (Math.abs(x-c) < 29*d && y < 28*d) return 10
-                  if (dist(c-40*d, byBtn) < 19*d) return 7
-                  if (dist(c, byBtn) < 19*d) return 8
-                  if (dist(c+40*d, byBtn) < 19*d) return 9
+                  if (dist(vw-14*d, 14*d) < 14*d) return 4
+                  if (dist(vw-41*d, 14*d) < 13*d) return 11
+                  if (dist(14*d, 14*d) < 15*d) return 5
+                  if (Math.abs(x-c) < 29*d && y < 30*d) return 10
+                  if (dist(c-57*d, byBtn) < 18*d) return 7
+                  if (dist(c-19*d, byBtn) < 18*d) return 8
+                  if (dist(c+19*d, byBtn) < 18*d) return 9
+                  if (dist(c+57*d, byBtn) < 18*d) return 12
                   if (dist(c, c) < 24*d) return 1
 
                   if (y > c-26*d && y < c+26*d) {
@@ -1597,6 +1809,8 @@ jobs:
                                   8 -> svc.setB()
                                   9 -> svc.cancelAB()
                                   10 -> svc.showSpeedPicker()
+                                  11 -> svc.minimize()
+                                  12 -> svc.showTimerPanel()
                               }
                           }
                           invalidate()
@@ -1605,6 +1819,121 @@ jobs:
                       MotionEvent.ACTION_CANCEL -> {
                           scrub = false
                           invalidate()
+                      }
+                  }
+                  return true
+              }
+          }
+
+          class MiniView(ctx: Context, private val svc: PlayerService) : View(ctx) {
+              var lp: WindowManager.LayoutParams? = null
+              private val d = ctx.resources.displayMetrics.density
+              private val size = 64f * d
+              private val rad = 28f * d
+              private val pt = Paint(Paint.ANTI_ALIAS_FLAG)
+              private val bmp = BitmapFactory.decodeResource(ctx.resources, R.drawable.ic_fg)
+              private var downX = 0f
+              private var downY = 0f
+              private var sx = 0
+              private var sy = 0
+              private var moved = false
+              private var onBadge = false
+
+              override fun onMeasure(w: Int, h: Int) {
+                  setMeasuredDimension(size.toInt(), size.toInt())
+              }
+
+              override fun onDraw(cv: Canvas) {
+                  super.onDraw(cv)
+                  val r = rad
+                  val duration = svc.dur()
+                  val frac = if (duration > 0) svc.pos().toFloat() / duration else 0f
+
+                  pt.style = Paint.Style.FILL
+                  pt.color = Color.parseColor("#0F1835")
+                  cv.drawCircle(r, r, r - 1*d, pt)
+
+                  cv.save()
+                  val clip = Path()
+                  clip.addCircle(r, r, r - 5*d, Path.Direction.CW)
+                  cv.clipPath(clip)
+                  val crop = bmp.width * 0.72f
+                  val off = ((bmp.width - crop) / 2f).toInt()
+                  cv.drawBitmap(
+                      bmp,
+                      Rect(off, off, off + crop.toInt(), off + crop.toInt()),
+                      RectF(0f, 0f, 2*r, 2*r),
+                      pt
+                  )
+                  cv.restore()
+
+                  pt.style = Paint.Style.STROKE
+                  pt.strokeWidth = 3*d
+                  pt.color = Color.parseColor("#2A3A78")
+                  cv.drawCircle(r, r, r - 2.5f*d, pt)
+                  pt.strokeCap = Paint.Cap.ROUND
+                  pt.color = Color.parseColor(if (svc.playing()) "#4CC3FF" else "#9FB0DC")
+                  cv.drawArc(
+                      RectF(2.5f*d, 2.5f*d, 2*r-2.5f*d, 2*r-2.5f*d),
+                      -90f, 360f*frac, false, pt
+                  )
+                  pt.strokeCap = Paint.Cap.BUTT
+
+                  // زر التشغيل / الإيقاف
+                  val bx = 51*d
+                  val by = 51*d
+                  pt.style = Paint.Style.FILL
+                  pt.color = Color.parseColor("#0F1835")
+                  cv.drawCircle(bx, by, 13*d, pt)
+                  pt.shader = LinearGradient(
+                      bx-11*d, by-11*d, bx+11*d, by+11*d,
+                      Color.parseColor("#FF8A4C"), Color.parseColor("#F05AE8"),
+                      Shader.TileMode.CLAMP
+                  )
+                  cv.drawCircle(bx, by, 11*d, pt)
+                  pt.shader = null
+                  pt.color = Color.WHITE
+                  if (svc.playing()) {
+                      cv.drawRect(bx-4.5f*d, by-5*d, bx-1.5f*d, by+5*d, pt)
+                      cv.drawRect(bx+1.5f*d, by-5*d, bx+4.5f*d, by+5*d, pt)
+                  } else {
+                      val tri = Path()
+                      tri.moveTo(bx-3*d, by-5.5f*d)
+                      tri.lineTo(bx-3*d, by+5.5f*d)
+                      tri.lineTo(bx+5.5f*d, by)
+                      tri.close()
+                      cv.drawPath(tri, pt)
+                  }
+              }
+
+              override fun onTouchEvent(e: MotionEvent): Boolean {
+                  when (e.actionMasked) {
+                      MotionEvent.ACTION_DOWN -> {
+                          downX = e.rawX
+                          downY = e.rawY
+                          sx = lp?.x ?: 0
+                          sy = lp?.y ?: 0
+                          moved = false
+                          onBadge = Math.hypot((e.x - 51*d).toDouble(), (e.y - 51*d).toDouble()) < 15*d
+                          return true
+                      }
+                      MotionEvent.ACTION_MOVE -> {
+                          val dx = e.rawX - downX
+                          val dy = e.rawY - downY
+                          if (!moved && Math.hypot(dx.toDouble(), dy.toDouble()) > 10*d) moved = true
+                          if (moved) {
+                              val p = lp
+                              if (p != null) {
+                                  p.x = sx + dx.toInt()
+                                  p.y = sy + dy.toInt()
+                                  try { svc.wm.updateViewLayout(this, p) } catch (_: Exception) {}
+                              }
+                          }
+                      }
+                      MotionEvent.ACTION_UP -> {
+                          if (!moved) {
+                              if (onBadge) { svc.toggle(); invalidate() } else svc.restore()
+                          }
                       }
                   }
                   return true
