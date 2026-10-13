@@ -1,295 +1,867 @@
-name: Build Android APK
+name: Build Arabic Audio Player APK
 
 on:
-  push:
-    branches: [main, master]
   workflow_dispatch:
+  push:
+    branches: ["main", "master"]
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup JDK 17
+      - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: "17"
 
-      - name: Setup Gradle
+      - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.7'
-
-      - name: Accept Android licenses
-        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null 2>&1 || true
+          gradle-version: "8.9"
 
       - name: Generate Android project
         shell: bash
         run: |
-          set -e
-          mkdir -p proj/app/src/main/java/com/floatplayer proj/app/src/main/assets proj/app/src/main/res/values proj/app/src/main/res/drawable
-          cd proj
+          set -euo pipefail
+          mkdir -p app/src/main/java/com/example/sawti app/src/main/res/values
 
-          cat > settings.gradle <<'GRADLE'
+          cat > settings.gradle.kts <<'EOF'
           pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
-          dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
-          rootProject.name = 'FloatPlayer'
-          include ':app'
-          GRADLE
-
-          cat > build.gradle <<'GRADLE'
-          plugins {
-              id 'com.android.application' version '8.5.2' apply false
-              id 'org.jetbrains.kotlin.android' version '1.9.24' apply false
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories { google(); mavenCentral() }
           }
-          GRADLE
+          rootProject.name = "SawtiAudioPlayer"
+          include(":app")
+          EOF
 
-          cat > gradle.properties <<'GRADLE'
-          org.gradle.jvmargs=-Xmx3g -Dfile.encoding=UTF-8
-          android.useAndroidX=true
-          kotlin.code.style=official
-          GRADLE
-
-          cat > app/build.gradle <<'GRADLE'
+          cat > build.gradle.kts <<'EOF'
           plugins {
-              id 'com.android.application'
-              id 'org.jetbrains.kotlin.android'
+              id("com.android.application") version "8.7.3" apply false
+              id("org.jetbrains.kotlin.android") version "2.0.21" apply false
+          }
+          EOF
+
+          cat > app/build.gradle.kts <<'EOF'
+          plugins {
+              id("com.android.application")
+              id("org.jetbrains.kotlin.android")
           }
           android {
-              namespace 'com.floatplayer'
-              compileSdk 34
-              defaultConfig { applicationId 'com.floatplayer'; minSdk 26; targetSdk 33; versionCode 2; versionName '1.1' }
-              compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
-              kotlinOptions { jvmTarget = '17' }
+              namespace = "com.example.sawti"
+              compileSdk = 35
+              defaultConfig {
+                  applicationId = "com.example.sawti"
+                  minSdk = 23
+                  targetSdk = 35
+                  versionCode = 1
+                  versionName = "1.0.0"
+              }
+              buildFeatures { buildConfig = true }
+              compileOptions {
+                  sourceCompatibility = JavaVersion.VERSION_17
+                  targetCompatibility = JavaVersion.VERSION_17
+              }
+              kotlinOptions { jvmTarget = "17" }
           }
-          GRADLE
+          EOF
 
-          cat > app/src/main/AndroidManifest.xml <<'XML'
-          <?xml version="1.0" encoding="utf-8"?>
+          cat > app/src/main/AndroidManifest.xml <<'EOF'
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-              <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
-              <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
-              <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>
-              <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
-              <application android:label="مشغّل الدراسة" android:icon="@drawable/ic_launcher" android:allowBackup="false" android:supportsRtl="true" android:theme="@android:style/Theme.Material.Light.NoActionBar">
-                  <activity android:name=".MainActivity" android:exported="true" android:configChanges="orientation|screenSize|keyboardHidden" android:windowSoftInputMode="adjustResize">
-                      <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
+              <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+              <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+              <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+              <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+              <uses-permission android:name="android.permission.WAKE_LOCK" />
+              <application
+                  android:allowBackup="true"
+                  android:label="صوتي - مشغّل الصوت"
+                  android:supportsRtl="true"
+                  android:theme="@style/AppTheme"
+                  android:usesCleartextTraffic="false">
+                  <activity
+                      android:name=".MainActivity"
+                      android:exported="true">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
                   </activity>
-                  <service android:name=".PlayerService" android:exported="false" android:foregroundServiceType="mediaPlayback"/>
+                  <service
+                      android:name=".PlaybackService"
+                      android:exported="false"
+                      android:foregroundServiceType="mediaPlayback" />
+                  <service
+                      android:name=".FloatingWidgetService"
+                      android:exported="false" />
               </application>
           </manifest>
-          XML
+          EOF
 
-          cat > app/src/main/res/drawable/ic_launcher.xml <<'XML'
-          <?xml version="1.0" encoding="utf-8"?>
-          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
-              <path android:fillColor="#10182B" android:pathData="M0,0h108v108h-108z"/>
-              <path android:fillColor="#66E3CF" android:pathData="M54,12 C66,12 73,24 73,34 C73,43 65,49 54,54 C43,49 35,43 35,34 C35,24 42,12 54,12 Z"/>
-              <path android:fillColor="#8B7CFF" android:pathData="M96,54 C96,66 84,73 74,73 C65,73 59,65 54,54 C59,43 65,35 74,35 C84,35 96,42 96,54 Z"/>
-              <path android:fillColor="#FF7892" android:pathData="M54,96 C42,96 35,84 35,74 C35,65 43,59 54,54 C65,59 73,65 73,74 C73,84 66,96 54,96 Z"/>
-              <path android:fillColor="#FFC857" android:pathData="M12,54 C12,42 24,35 34,35 C43,35 49,43 54,54 C49,65 43,73 34,73 C24,73 12,66 12,54 Z"/>
-              <circle android:fillColor="#FFFFFF" android:cx="54" android:cy="54" android:radius="9"/>
-          </vector>
-          XML
+          cat > app/src/main/res/values/styles.xml <<'EOF'
+          <resources>
+              <style name="AppTheme" parent="android:style/Theme.Material.Light.NoActionBar">
+                  <item name="android:fontFamily">sans</item>
+                  <item name="android:colorAccent">#6C63FF</item>
+                  <item name="android:navigationBarColor">#101426</item>
+                  <item name="android:statusBarColor">#101426</item>
+                  <item name="android:windowLightStatusBar">false</item>
+                  <item name="android:windowActionModeOverlay">true</item>
+              </style>
+          </resources>
+          EOF
 
-          cat > app/src/main/res/values/styles.xml <<'XML'
-          <?xml version="1.0" encoding="utf-8"?>
-          <resources><style name="AppTheme" parent="android:style/Theme.Material.Light.NoActionBar"><item name="android:fontFamily">sans</item><item name="android:colorAccent">#66E3CF</item><item name="android:statusBarColor">#0B1424</item><item name="android:navigationBarColor">#0B1424</item><item name="android:windowLightStatusBar">false</item></style></resources>
-          XML
-
-          cat > app/src/main/java/com/floatplayer/MainActivity.kt <<'KOTLIN'
-          package com.floatplayer
-
-          import android.app.Activity
-          import android.content.Intent
-          import android.graphics.Color
-          import android.net.Uri
-          import android.os.Build
-          import android.os.Bundle
-          import android.provider.OpenableColumns
-          import android.provider.Settings
-          import android.webkit.JavascriptInterface
-          import android.webkit.WebChromeClient
-          import android.webkit.WebView
-          import android.widget.Toast
-          import org.json.JSONArray
-          import org.json.JSONObject
-
-          class MainActivity : Activity() {
-              private lateinit var web: WebView
-              override fun onCreate(savedInstanceState: Bundle?) {
-                  super.onCreate(savedInstanceState)
-                  window.statusBarColor = Color.rgb(11,20,36)
-                  window.navigationBarColor = Color.rgb(11,20,36)
-                  web = WebView(this)
-                  web.settings.javaScriptEnabled = true
-                  web.settings.domStorageEnabled = true
-                  web.webChromeClient = WebChromeClient()
-                  web.setBackgroundColor(Color.rgb(11,20,36))
-                  web.addJavascriptInterface(Bridge(), "Android")
-                  setContentView(web)
-                  web.loadUrl("file:///android_asset/index.html")
-                  if (Build.VERSION.SDK_INT >= 33) requestPermissions(arrayOf("android.permission.POST_NOTIFICATIONS"), 1)
-              }
-              private fun pickAudio() {
-                  val i = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-                      addCategory(Intent.CATEGORY_OPENABLE); type = "audio/*"
-                      putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
-                      addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
-                  }
-                  startActivityForResult(i, 7)
-              }
-              private fun nameOf(uri: Uri): String {
-                  var name = "صوتية"
-                  try { contentResolver.query(uri, null, null, null, null)?.use { c -> if (c.moveToFirst()) { val ix=c.getColumnIndex(OpenableColumns.DISPLAY_NAME); if(ix>=0) name=c.getString(ix) } } } catch (_: Exception) {}
-                  return name.substringBeforeLast('.')
-              }
-              @Deprecated("Deprecated in Android")
-              override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-                  super.onActivityResult(requestCode, resultCode, data)
-                  if (requestCode != 7 || resultCode != RESULT_OK || data == null) return
-                  val uris = ArrayList<Uri>()
-                  data.clipData?.let { clip -> for (i in 0 until clip.itemCount) uris.add(clip.getItemAt(i).uri) } ?: data.data?.let { uris.add(it) }
-                  val arr = JSONArray()
-                  for (u in uris) {
-                      try { contentResolver.takePersistableUriPermission(u, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
-                      arr.put(JSONObject().put("uri",u.toString()).put("name",nameOf(u)))
-                  }
-                  web.evaluateJavascript("onPicked(${arr.toString()})", null)
-              }
-              override fun onBackPressed() { web.evaluateJavascript("goBack()") { if (it == "true") finish() } }
-              inner class Bridge {
-                  @JavascriptInterface fun pick() { runOnUiThread { pickAudio() } }
-                  @JavascriptInterface fun requestOverlay() { runOnUiThread { if (!Settings.canDrawOverlays(this@MainActivity)) startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))) } }
-                  @JavascriptInterface fun play(queue: String, index: Int, position: Int) {
-                      runOnUiThread {
-                          if (!Settings.canDrawOverlays(this@MainActivity)) {
-                              Toast.makeText(this@MainActivity,"فعّل السماح بالظهور فوق التطبيقات أولًا",Toast.LENGTH_LONG).show()
-                              startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
-                              return@runOnUiThread
-                          }
-                          val i=Intent(this@MainActivity,PlayerService::class.java).putExtra("queue",queue).putExtra("idx",index).putExtra("pos",position)
-                          if (Build.VERSION.SDK_INT >= 26) startForegroundService(i) else startService(i)
-                      }
-                  }
-                  @JavascriptInterface fun toggle() { runOnUiThread { PlayerService.inst?.toggle() } }
-                  @JavascriptInterface fun stop() { runOnUiThread { PlayerService.inst?.stopTrack() } }
-                  @JavascriptInterface fun next() { runOnUiThread { PlayerService.inst?.nextTrack() } }
-                  @JavascriptInterface fun previous() { runOnUiThread { PlayerService.inst?.previousTrack() } }
-                  @JavascriptInterface fun seekTo(ms: Int) { runOnUiThread { PlayerService.inst?.seekTo(ms) } }
-                  @JavascriptInterface fun speed(value: Float) { runOnUiThread { PlayerService.inst?.setSpeed(value) } }
-                  @JavascriptInterface fun state(): String = PlayerService.inst?.stateJson() ?: "{}"
-              }
-          }
-          KOTLIN
-
-          cat > app/src/main/java/com/floatplayer/PlayerService.kt <<'KOTLIN'
-          package com.floatplayer
+          cat > app/src/main/java/com/example/sawti/PlaybackService.kt <<'EOF'
+          package com.example.sawti
 
           import android.app.Notification
           import android.app.NotificationChannel
           import android.app.NotificationManager
+          import android.app.PendingIntent
           import android.app.Service
-          import android.content.Context
           import android.content.Intent
-          import android.graphics.Color
-          import android.graphics.PixelFormat
-          import android.graphics.Typeface
-          import android.graphics.drawable.GradientDrawable
+          import android.media.AudioAttributes
           import android.media.MediaPlayer
           import android.net.Uri
           import android.os.Build
           import android.os.Handler
           import android.os.IBinder
           import android.os.Looper
+          import android.widget.Toast
+          import org.json.JSONArray
+          import java.io.IOException
+
+          class PlaybackService : Service() {
+              companion object {
+                  const val ACTION_ADD = "com.example.sawti.ADD"
+                  const val ACTION_PLAY_INDEX = "com.example.sawti.PLAY_INDEX"
+                  const val ACTION_TOGGLE = "com.example.sawti.TOGGLE"
+                  const val ACTION_STOP = "com.example.sawti.STOP"
+                  const val ACTION_NEXT = "com.example.sawti.NEXT"
+                  const val ACTION_PREVIOUS = "com.example.sawti.PREVIOUS"
+                  const val ACTION_SEEK = "com.example.sawti.SEEK"
+                  const val ACTION_SPEED = "com.example.sawti.SPEED"
+                  const val ACTION_REMOVE = "com.example.sawti.REMOVE"
+                  const val ACTION_MOVE = "com.example.sawti.MOVE"
+                  const val ACTION_REPLACE_LIST = "com.example.sawti.REPLACE_LIST"
+                  const val BROADCAST_STATE = "com.example.sawti.STATE"
+                  const val EXTRA_URI = "uri"
+                  const val EXTRA_INDEX = "index"
+                  const val EXTRA_POSITION = "position"
+                  const val EXTRA_SPEED = "speed"
+                  const val EXTRA_URIS = "uris"
+                  const val EXTRA_FROM = "from"
+                  const val EXTRA_TO = "to"
+                  private const val CHANNEL_ID = "sawti_playback"
+                  private const val NOTIFICATION_ID = 42
+              }
+
+              private var player: MediaPlayer? = null
+              private val playlist = ArrayList<String>()
+              private var currentIndex = -1
+              private var speed = 1.0f
+              private val handler = Handler(Looper.getMainLooper())
+              private val prefs by lazy { getSharedPreferences("sawti", MODE_PRIVATE) }
+              private val ticker = object : Runnable {
+                  override fun run() {
+                      broadcastState()
+                      if (player != null) handler.postDelayed(this, 500)
+                  }
+              }
+
+              override fun onCreate() {
+                  super.onCreate()
+                  createChannel()
+                  loadPlaylist()
+                  startForeground(NOTIFICATION_ID, notification())
+                  handler.post(ticker)
+              }
+
+              override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+                  when (intent?.action) {
+                      ACTION_ADD -> intent.getStringExtra(EXTRA_URI)?.let { addUri(it) }
+                      ACTION_PLAY_INDEX -> playIndex(intent.getIntExtra(EXTRA_INDEX, 0))
+                      ACTION_TOGGLE -> toggle()
+                      ACTION_STOP -> stopPlayback()
+                      ACTION_NEXT -> if (playlist.isNotEmpty()) playIndex((currentIndex + 1).mod(playlist.size))
+                      ACTION_PREVIOUS -> if (playlist.isNotEmpty()) playIndex(if (currentIndex <= 0) playlist.lastIndex else currentIndex - 1)
+                      ACTION_SEEK -> {
+                          val duration = player?.duration ?: 0
+                          val requested = intent.getIntExtra(EXTRA_POSITION, 0).coerceIn(0, duration)
+                          try { player?.seekTo(requested) } catch (_: IllegalStateException) { }
+                          broadcastState()
+                      }
+                      ACTION_SPEED -> {
+                          speed = intent.getFloatExtra(EXTRA_SPEED, 1.0f).coerceIn(0.5f, 2.0f)
+                          applySpeed()
+                          broadcastState()
+                      }
+                      ACTION_REMOVE -> removeAt(intent.getIntExtra(EXTRA_INDEX, -1))
+                      ACTION_MOVE -> moveItem(intent.getIntExtra(EXTRA_FROM, -1), intent.getIntExtra(EXTRA_TO, -1))
+                      ACTION_REPLACE_LIST -> {
+                          val values = intent.getStringArrayListExtra(EXTRA_URIS)
+                          if (values != null) { playlist.clear(); playlist.addAll(values); persistPlaylist(); broadcastState() }
+                      }
+                  }
+                  updateNotification()
+                  return START_STICKY
+              }
+
+              private fun loadPlaylist() {
+                  val json = prefs.getString("playlist", "[]") ?: "[]"
+                  try {
+                      val array = JSONArray(json)
+                      for (i in 0 until array.length()) playlist.add(array.getString(i))
+                  } catch (_: Exception) { playlist.clear() }
+                  currentIndex = prefs.getInt("index", -1).coerceIn(-1, maxOf(-1, playlist.lastIndex))
+                  speed = prefs.getFloat("speed", 1.0f).coerceIn(0.5f, 2.0f)
+              }
+
+              private fun persistPlaylist() {
+                  val array = JSONArray()
+                  playlist.forEach { array.put(it) }
+                  prefs.edit().putString("playlist", array.toString()).putInt("index", currentIndex).putFloat("speed", speed).apply()
+              }
+
+              private fun addUri(value: String) {
+                  if (!playlist.contains(value)) playlist.add(value)
+                  persistPlaylist()
+                  if (currentIndex < 0 && playlist.isNotEmpty()) playIndex(0) else broadcastState()
+              }
+
+              private fun removeAt(index: Int) {
+                  if (index !in playlist.indices) return
+                  val wasCurrent = index == currentIndex
+                  playlist.removeAt(index)
+                  if (playlist.isEmpty()) { currentIndex = -1; releasePlayer() }
+                  else if (index < currentIndex) currentIndex--
+                  else if (wasCurrent) { currentIndex = -1; playIndex(index.coerceAtMost(playlist.lastIndex)) }
+                  persistPlaylist(); broadcastState()
+              }
+
+              private fun moveItem(from: Int, to: Int) {
+                  if (from !in playlist.indices || to !in playlist.indices || from == to) return
+                  val item = playlist.removeAt(from)
+                  playlist.add(to, item)
+                  if (currentIndex == from) currentIndex = to
+                  else if (from < currentIndex && to >= currentIndex) currentIndex--
+                  else if (from > currentIndex && to <= currentIndex) currentIndex++
+                  persistPlaylist(); broadcastState()
+              }
+
+              private fun playIndex(index: Int) {
+                  if (index !in playlist.indices) return
+                  currentIndex = index
+                  releasePlayer()
+                  val next = MediaPlayer()
+                  player = next
+                  try {
+                      next.setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build())
+                      next.setDataSource(this, Uri.parse(playlist[index]))
+                      next.setOnPreparedListener { mp ->
+                          applySpeedTo(mp)
+                          mp.start()
+                          updateNotification()
+                          broadcastState()
+                      }
+                      next.setOnCompletionListener {
+                          if (playlist.isNotEmpty()) playIndex((currentIndex + 1).mod(playlist.size)) else stopPlayback()
+                      }
+                      next.setOnErrorListener { _, _, _ -> broadcastState(); true }
+                      next.prepareAsync()
+                      persistPlaylist(); broadcastState()
+                  } catch (e: IOException) {
+                      releasePlayer()
+                      Toast.makeText(this, "تعذّر فتح الملف الصوتي", Toast.LENGTH_SHORT).show()
+                      broadcastState()
+                  } catch (e: SecurityException) {
+                      releasePlayer(); broadcastState()
+                  } catch (e: IllegalArgumentException) {
+                      releasePlayer(); broadcastState()
+                  }
+              }
+
+              private fun toggle() {
+                  val mp = player
+                  if (mp == null) {
+                      if (playlist.isNotEmpty()) playIndex(currentIndex.coerceAtLeast(0))
+                      return
+                  }
+                  try {
+                      if (mp.isPlaying) mp.pause() else if (mp.duration > 0) mp.start()
+                      applySpeed()
+                  } catch (_: IllegalStateException) { }
+                  updateNotification(); broadcastState()
+              }
+
+              private fun stopPlayback() {
+                  try { player?.stop() } catch (_: Exception) { }
+                  releasePlayer()
+                  updateNotification(); broadcastState()
+              }
+
+              private fun releasePlayer() {
+                  try { player?.release() } catch (_: Exception) { }
+                  player = null
+              }
+
+              private fun applySpeed() {
+                  player?.let { applySpeedTo(it) }
+                  prefs.edit().putFloat("speed", speed).apply()
+              }
+
+              private fun applySpeedTo(mp: MediaPlayer) {
+                  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                      try { mp.playbackParams = mp.playbackParams.setSpeed(speed) } catch (_: Exception) { }
+                  }
+              }
+
+              private fun broadcastState() {
+                  val mp = player
+                  val intent = Intent(BROADCAST_STATE).setPackage(packageName)
+                      .putStringArrayListExtra(EXTRA_URIS, ArrayList(playlist))
+                      .putExtra(EXTRA_INDEX, currentIndex)
+                      .putExtra(EXTRA_POSITION, try { mp?.currentPosition ?: 0 } catch (_: Exception) { 0 })
+                      .putExtra("duration", try { mp?.duration ?: 0 } catch (_: Exception) { 0 })
+                      .putExtra("playing", try { mp?.isPlaying ?: false } catch (_: Exception) { false })
+                      .putExtra(EXTRA_SPEED, speed)
+                  sendBroadcast(intent)
+              }
+
+              private fun createChannel() {
+                  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                      val channel = NotificationChannel(CHANNEL_ID, "تشغيل الصوت", NotificationManager.IMPORTANCE_LOW)
+                      channel.description = "إشعار تشغيل الصوت في الخلفية"
+                      getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+                  }
+              }
+
+              private fun notification(): Notification {
+                  val openIntent = PendingIntent.getActivity(this, 1, Intent(this, MainActivity::class.java), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+                  val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) Notification.Builder(this, CHANNEL_ID) else Notification.Builder(this)
+                  return builder.setSmallIcon(android.R.drawable.ic_media_play)
+                      .setContentTitle("صوتي - مشغّل الصوت")
+                      .setContentText(currentTitle())
+                      .setContentIntent(openIntent)
+                      .setOngoing(player != null)
+                      .addAction(Notification.Action.Builder(android.graphics.drawable.Icon.createWithResource(this, android.R.drawable.ic_media_previous), "السابق", servicePending(ACTION_PREVIOUS, 2)).build())
+                      .addAction(Notification.Action.Builder(android.graphics.drawable.Icon.createWithResource(this, if (isPlaying()) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play), if (isPlaying()) "إيقاف مؤقت" else "تشغيل", servicePending(ACTION_TOGGLE, 3)).build())
+                      .addAction(Notification.Action.Builder(android.graphics.drawable.Icon.createWithResource(this, android.R.drawable.ic_media_next), "التالي", servicePending(ACTION_NEXT, 4)).build())
+                      .build()
+              }
+
+              private fun servicePending(action: String, request: Int): PendingIntent {
+                  val intent = Intent(this, PlaybackService::class.java).setAction(action)
+                  return PendingIntent.getService(this, request, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+              }
+
+              private fun currentTitle(): String = if (currentIndex in playlist.indices) Uri.parse(playlist[currentIndex]).lastPathSegment ?: "ملف صوتي" else "اختر ملفًا صوتيًا"
+              private fun isPlaying(): Boolean = try { player?.isPlaying == true } catch (_: Exception) { false }
+              private fun updateNotification() {
+                  try { getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification()) } catch (_: Exception) { }
+              }
+
+              override fun onDestroy() {
+                  handler.removeCallbacks(ticker)
+                  releasePlayer()
+                  super.onDestroy()
+              }
+              override fun onBind(intent: Intent?): IBinder? = null
+          }
+          EOF
+
+          cat > app/src/main/java/com/example/sawti/FloatingWidgetService.kt <<'EOF'
+          package com.example.sawti
+
+          import android.app.Service
+          import android.content.Intent
+          import android.graphics.Color
+          import android.graphics.PixelFormat
+          import android.graphics.Typeface
+          import android.graphics.drawable.GradientDrawable
+          import android.os.Build
+          import android.os.IBinder
           import android.view.Gravity
           import android.view.MotionEvent
           import android.view.View
           import android.view.WindowManager
-          import android.widget.Button
           import android.widget.LinearLayout
           import android.widget.TextView
-          import android.widget.Toast
-          import org.json.JSONArray
-          import org.json.JSONObject
 
-          class PlayerService : Service() {
-              companion object { var inst: PlayerService? = null }
+          class FloatingWidgetService : Service() {
               private lateinit var wm: WindowManager
-              private var mp: MediaPlayer? = null
-              private var ready=false
-              private var bubble: TextView?=null
-              private var panel: View?=null
-              private var panelKind=""
-              private var queue=JSONArray()
-              private var idx=0
-              private var curUri=""
-              private var curName=""
-              private var speed=1f
-              private var loopA=-1
-              private var loopB=-1
-              private val h=Handler(Looper.getMainLooper())
-              private val tick=object:Runnable { override fun run(){ try { if(ready && mp?.isPlaying==true && loopA>=0 && loopB>loopA && (mp?.currentPosition?:0)>=loopB) mp?.seekTo(loopA); bubble?.text=if(ready && mp?.isPlaying==true) "Ⅱ" else "▶" } catch (_:Exception){}; h.postDelayed(this,250) } }
-              override fun onBind(intent: Intent?): IBinder?=null
-              override fun onCreate(){ super.onCreate(); inst=this; wm=getSystemService(WINDOW_SERVICE) as WindowManager; val nm=getSystemService(NOTIFICATION_SERVICE) as NotificationManager; nm.createNotificationChannel(NotificationChannel("player","مشغّل الدراسة",NotificationManager.IMPORTANCE_LOW)); h.post(tick) }
-              private fun notification(title:String)=Notification.Builder(this,"player").setSmallIcon(android.R.drawable.ic_media_play).setContentTitle(title).setContentText("مشغّل الدراسة يعمل").setOngoing(true).build()
-              override fun onStartCommand(intent:Intent?,flags:Int,startId:Int):Int { startForeground(1,notification(curName.ifEmpty { "مشغّل الدراسة" })); if(intent?.hasExtra("queue")==true){ queue=JSONArray(intent.getStringExtra("queue")); playAt(intent.getIntExtra("idx",0),intent.getIntExtra("pos",0)) }; return START_NOT_STICKY }
-              private fun playAt(index:Int, position:Int){ if(index !in 0 until queue.length()) return; idx=index; val item=queue.getJSONObject(index); curUri=item.optString("uri"); curName=item.optString("name","صوتية"); loopA=-1; loopB=-1; ready=false; try{mp?.release()}catch(_:Exception){}; val player=MediaPlayer(); mp=player; try{ player.setDataSource(this,Uri.parse(curUri)); player.setOnPreparedListener { p -> ready=true; try{p.playbackParams=p.playbackParams.setSpeed(speed)}catch(_:Exception){}; if(position>0)p.seekTo(position.coerceAtMost(p.duration)); p.start(); bubble?.text="Ⅱ" }; player.setOnCompletionListener { if(idx+1<queue.length()) playAt(idx+1,0) else stopTrack() }; player.setOnErrorListener { _,_,_-> ready=false; true }; player.prepareAsync() }catch(_:Exception){ ready=false; Toast.makeText(this,"تعذّر تشغيل الملف",Toast.LENGTH_SHORT).show() }; (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).notify(1,notification(curName)); ensureBubble() }
-              private fun ensureBubble(){ if(bubble!=null)return; val b=TextView(this).apply{ text="▶"; textSize=24f; gravity=Gravity.CENTER; setTextColor(Color.WHITE); background=GradientDrawable().apply{shape=GradientDrawable.OVAL;setColor(Color.rgb(101,86,217));setStroke(dp(2),Color.rgb(102,227,207))}; setOnClickListener{toggle()}; setOnLongClickListener{showPanel("main");true} }; val p=WindowManager.LayoutParams(dp(62),dp(62),WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,PixelFormat.TRANSLUCENT); p.gravity=Gravity.TOP or Gravity.START;p.x=resources.displayMetrics.widthPixels-dp(82);p.y=dp(180); var dx=0f;var dy=0f;var sx=0;var sy=0; b.setOnTouchListener { v,e -> when(e.action){MotionEvent.ACTION_DOWN->{dx=e.rawX;dy=e.rawY;sx=p.x;sy=p.y;true};MotionEvent.ACTION_MOVE->{val mx=e.rawX-dx;val my=e.rawY-dy;if(kotlin.math.abs(mx)>8||kotlin.math.abs(my)>8){p.x=sx+mx.toInt();p.y=sy+my.toInt();try{wm.updateViewLayout(v,p)}catch(_:Exception){}};true};MotionEvent.ACTION_UP->{if(kotlin.math.abs(e.rawX-dx)<8&&kotlin.math.abs(e.rawY-dy)<8){if(e.eventTime-e.downTime>500) showPanel("main") else toggle()};true};else->true} }; wm.addView(b,p);bubble=b }
-              private fun dp(v:Int)=(v*resources.displayMetrics.density).toInt()
-              fun toggle(){ if(!ready){if(curUri.isNotEmpty())playAt(idx,0);return};try{if(mp?.isPlaying==true)mp?.pause() else mp?.start()}catch(_:Exception){};bubble?.text=if(mp?.isPlaying==true)"Ⅱ" else "▶" }
-              fun stopTrack(){ try{mp?.stop()}catch(_:Exception){};try{mp?.release()}catch(_:Exception){};mp=null;ready=false;loopA=-1;loopB=-1;bubble?.text="▶"; (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).notify(1,notification("تم إيقاف الصوتية")) }
-              fun nextTrack(){if(idx+1<queue.length())playAt(idx+1,0)else stopTrack()}
-              fun previousTrack(){if(ready&&(mp?.currentPosition?:0)>3000)seekTo(0)else if(idx>0)playAt(idx-1,0)else seekTo(0)}
-              fun seekTo(ms:Int){if(ready)try{mp?.seekTo(ms.coerceIn(0,mp?.duration?:0))}catch(_:Exception){}}
-              fun setSpeed(v:Float){speed=(kotlin.math.round(v*20)/20f).coerceIn(0.5f,3f);if(ready)try{mp?.playbackParams=mp!!.playbackParams.setSpeed(speed)}catch(_:Exception){} }
-              private fun pos()=try{if(ready)mp?.currentPosition?:0 else 0}catch(_:Exception){0}
-              private fun dur()=try{if(ready)mp?.duration?:0 else 0}catch(_:Exception){0}
-              fun stateJson()=JSONObject().put("uri",curUri).put("name",curName).put("playing",ready&&(mp?.isPlaying==true)).put("pos",pos()).put("dur",dur()).put("speed",speed).toString()
-              private fun btn(text:String, action:()->Unit)=Button(this).apply{this.text=text;isAllCaps=false;setTextColor(Color.WHITE);background=GradientDrawable().apply{setColor(Color.rgb(38,59,87));cornerRadius=dp(12).toFloat()};setOnClickListener{action()} }
-              private fun showPanel(kind:String){ hidePanel();panelKind=kind;val root=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(dp(14),dp(12),dp(14),dp(12));background=GradientDrawable().apply{setColor(Color.rgb(17,30,50));cornerRadius=dp(20).toFloat();setStroke(dp(1),Color.rgb(102,227,207))} }; val title=TextView(this).apply{text=if(kind=="speed")"سرعة التشغيل" else "التحكم بالصوتية";textSize=18f;typeface=Typeface.DEFAULT_BOLD;setTextColor(Color.WHITE);gravity=Gravity.CENTER;setPadding(0,0,0,dp(8))};root.addView(title);if(kind=="speed"){ for(v in listOf(0.5f,0.75f,1f,1.25f,1.5f,2f,2.5f,3f)) root.addView(btn("${v}×"){setSpeed(v);hidePanel()}) }else{root.addView(btn("▶ / إيقاف مؤقت"){toggle()});root.addView(btn("⏮ السابق"){previousTrack()});root.addView(btn("⏭ التالي"){nextTrack()});root.addView(btn("■ إيقاف نهائي"){stopTrack()});root.addView(btn("سرعة التشغيل ${speed}×"){showPanel("speed")});root.addView(btn("إغلاق المشغّل العائم"){closeAll()})};root.addView(btn("إغلاق"){hidePanel()});root.setOnTouchListener { _,e -> if(e.action==MotionEvent.ACTION_OUTSIDE){hidePanel();true}else false };val p=WindowManager.LayoutParams(dp(260),WindowManager.LayoutParams.WRAP_CONTENT,WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,PixelFormat.TRANSLUCENT);p.gravity=Gravity.TOP or Gravity.START;p.x=(resources.displayMetrics.widthPixels-dp(280)).coerceAtLeast(dp(4));p.y=dp(160);panel=root;try{wm.addView(root,p)}catch(_:Exception){panel=null} }
-              private fun hidePanel(){panel?.let{try{wm.removeView(it)}catch(_:Exception){}};panel=null;panelKind=""}
-              private fun closeAll(){hidePanel();bubble?.let{try{wm.removeView(it)}catch(_:Exception){}};bubble=null;stopTrack();stopForeground(STOP_FOREGROUND_REMOVE);stopSelf()}
-              override fun onDestroy(){hidePanel();h.removeCallbacksAndMessages(null);try{mp?.release()}catch(_:Exception){};bubble?.let{try{wm.removeView(it)}catch(_:Exception){}};bubble=null;inst=null;super.onDestroy()}
-          }
-          KOTLIN
+              private var bubble: TextView? = null
+              private var panel: LinearLayout? = null
+              private var bubbleParams: WindowManager.LayoutParams? = null
+              private var panelParams: WindowManager.LayoutParams? = null
+              private var downX = 0f
+              private var downY = 0f
+              private var startX = 0
+              private var startY = 0
+              private var longPress = false
+              private val handler = android.os.Handler(android.os.Looper.getMainLooper())
 
-          cat > app/src/main/assets/index.html <<'HTML'
-          <!doctype html>
-          <html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"><style>
-          :root{--bg:#0b1424;--card:#16243a;--tx:#f4f7ff;--mu:#a5b4cc;--mint:#66e3cf;--violet:#8b7cff;--red:#a83e55}*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}body{margin:0;padding:18px 14px 50px;color:var(--tx);font-family:sans-serif;background:radial-gradient(ellipse at top,#203858 0%,var(--bg) 70%)}h1{font-size:22px;color:var(--mint);margin:5px 0 15px}h3{margin:18px 4px 8px}.btn{width:100%;border:0;border-radius:15px;padding:13px;margin:6px 0;font:inherit;font-weight:bold;color:white;background:linear-gradient(135deg,#238f9c,#6556d9)}.btn.secondary{background:#1a2b43;border:1px solid #66e3cf40}.card{display:flex;align-items:center;gap:10px;background:linear-gradient(135deg,#192b43,#142137);border:1px solid #ffffff0c;border-radius:17px;padding:11px;margin:8px 0}.card .t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.card small{display:block;color:var(--mu);margin-top:4px}.ic{border:0;border-radius:12px;width:39px;height:39px;font-size:16px;background:#8d354833;color:var(--tx);flex-shrink:0}.ic.rename{background:#66e3cf24}.cur{outline:2px solid var(--mint)}.note{color:var(--mu);font-size:13px;padding:6px 4px}.player{background:linear-gradient(145deg,#1c304b,#121e32);border:1px solid #ffffff18;border-radius:23px;padding:16px;margin:12px 0 20px;box-shadow:0 12px 30px #0003}.player-head{display:flex;align-items:center;gap:10px}.player-icon{display:grid;place-items:center;width:46px;height:46px;border-radius:15px;color:#0b1424;background:linear-gradient(135deg,var(--mint),var(--violet));font-size:27px}.player-info{flex:1;min-width:0}.player-info span{display:block;color:var(--mu);font-size:12px;margin-top:5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.status{color:var(--mint);font-size:12px}#audioSeek{width:100%;accent-color:var(--mint);margin:18px 0 0}.times{display:flex;justify-content:space-between;color:var(--mu);font-size:12px}.controls{display:flex;align-items:center;justify-content:center;gap:7px;flex-wrap:wrap;margin-top:14px}.controls button{border:1px solid #ffffff18;border-radius:12px;padding:10px;color:var(--tx);background:#263b57;font:inherit;font-weight:bold}.controls .play{width:49px;height:45px;background:var(--mint);color:#0b1424;font-size:20px}.controls .stop{background:#8d3548;color:#fff0f2}
-          </style></head><body><h1>🎧 مشغّل الدراسة</h1><section class="player"><div class="player-head"><span class="player-icon">♫</span><div class="player-info"><strong>المشغّل الصوتي</strong><span id="nowName">لا توجد صوتية قيد التشغيل</span></div><span id="playState" class="status">متوقف</span></div><input id="audioSeek" type="range" min="0" max="0" value="0"><div class="times"><span id="audioPos">0:00</span><span id="audioDur">0:00</span></div><div class="controls"><button onclick="Android.previous()">⏮</button><button class="play" id="mainPlay" onclick="Android.toggle()">▶</button><button onclick="Android.next()">⏭</button><button class="stop" onclick="Android.stop()">■ إيقاف</button></div><div class="controls"><button onclick="setSpeed()">سرعة التشغيل</button><button onclick="requestOverlay()">تفعيل المشغّل العائم</button></div></section><div id="app"></div><script>
-          let S;try{S=JSON.parse(localStorage.getItem('st')||'null')}catch(e){S=null}if(!S)S={lists:[],last:null,open:null};let target=null,seeking=false;const save=()=>localStorage.setItem('st',JSON.stringify(S));const uid=()=>Math.random().toString(36).slice(2,9);const L=id=>S.lists.find(l=>l.id===id);const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');const fmt=ms=>Math.floor(Math.max(0,ms)/60000)+':'+String(Math.floor(Math.max(0,ms)/1000)%60).padStart(2,'0');
-          function requestOverlay(){Android.requestOverlay()}function setSpeed(){const v=prompt('سرعة التشغيل من 0.5 إلى 3', '1');if(v!==null){const n=Number(v);if(n>=.5&&n<=3)Android.speed(n)}}
-          function onPicked(json){let a;try{a=typeof json==='string'?JSON.parse(json):json}catch(e){return}if(!a||!a.length)return;const tracks=a.map(x=>({id:uid(),name:x.name,uri:x.uri}));if(target&&L(target))L(target).tracks.push(...tracks);else S.lists.push({id:uid(),name:a.length>1?'قائمة '+(S.lists.length+1):tracks[0].name,tracks});target=null;save();render()}
-          function addNew(){target=null;Android.pick()}function addTo(id){target=id;Android.pick()}function play(lid,tid,pos=0){const l=L(lid);if(!l)return;const i=l.tracks.findIndex(t=>t.id===tid);if(i<0)return;S.last={l:lid,t:tid,pos};save();Android.play(JSON.stringify(l.tracks.map(t=>({uri:t.uri,name:t.name}))),i,pos);render()}function resume(){if(S.last)play(S.last.l,S.last.t,S.last.pos||0)}function openL(id){S.open=id;render()}function goBack(){if(S.open){S.open=null;render();return false}return true}
-          function renameL(id){const l=L(id);if(!l)return;const n=prompt('اسم القائمة',l.name);if(n!==null&&n.trim()){l.name=n.trim();save();render()}}function delL(id){if(confirm('حذف قائمة التشغيل؟')){S.lists=S.lists.filter(l=>l.id!==id);save();render()}}function delT(lid,tid){const l=L(lid);if(l){l.tracks=l.tracks.filter(t=>t.id!==tid);save();render()}}
-          function render(){const a=document.getElementById('app');if(!S.open){const x=S.last&&L(S.last.l);a.innerHTML='<button class="btn" onclick="addNew()">＋ إضافة صوتية / قائمة جديدة</button>'+(x?'<button class="btn secondary" onclick="resume()">▶ متابعة آخر صوتية</button>':'')+'<h3>قوائم التشغيل</h3>'+(S.lists.map(l=>`<div class="card${S.last&&S.last.l===l.id?' cur':''}" onclick="openL('${l.id}')"><span style="font-size:24px">📁</span><div class="t">${esc(l.name)}<small>${l.tracks.length} ملف</small></div><button class="ic rename" onclick="event.stopPropagation();renameL('${l.id}')">✏️</button><button class="ic" onclick="event.stopPropagation();delL('${l.id}')">🗑</button></div>`).join('')||'<div class="note">لا توجد قوائم بعد. أضف صوتياتك للبدء.</div>')}';return}const l=L(S.open);if(!l){S.open=null;render();return}a.innerHTML='<button class="btn secondary" onclick="goBack()">→ رجوع</button>'+`<h3>📁 ${esc(l.name)}</h3><button class="btn secondary" onclick="renameL('${l.id}')">✏️ إعادة تسمية</button><button class="btn" onclick="addTo('${l.id}')">＋ إضافة ملفات</button>`+(l.tracks.map(t=>`<div class="card${S.last&&S.last.t===t.id?' cur':''}" onclick="play('${l.id}','${t.id}')"><span style="font-size:22px">🎵</span><div class="t">${esc(t.name)}</div><button class="ic" onclick="event.stopPropagation();delT('${l.id}','${t.id}')">🗑</button></div>`).join('')||'<div class="note">القائمة فارغة.</div>')}
-          document.getElementById('audioSeek').addEventListener('pointerdown',()=>seeking=true);document.getElementById('audioSeek').addEventListener('change',e=>{Android.seekTo(Number(e.target.value));seeking=false});document.getElementById('audioSeek').addEventListener('pointerup',()=>seeking=false);
-          function updatePlayer(s){document.getElementById('nowName').textContent=s.name||'لا توجد صوتية قيد التشغيل';document.getElementById('playState').textContent=s.playing?'قيد التشغيل':(s.uri&&s.dur>0?'متوقف مؤقتًا':'متوقف');document.getElementById('mainPlay').textContent=s.playing?'Ⅱ':'▶';const seek=document.getElementById('audioSeek');seek.max=Math.max(0,s.dur||0);if(!seeking)seek.value=s.pos||0;document.getElementById('audioPos').textContent=fmt(s.pos||0);document.getElementById('audioDur').textContent=fmt(s.dur||0)}
-          setInterval(()=>{try{const s=JSON.parse(Android.state());updatePlayer(s);if(!s.uri)return;for(const l of S.lists){const t=l.tracks.find(t=>t.uri===s.uri);if(t){const changed=!S.last||S.last.t!==t.id;S.last={l:l.id,t:t.id,pos:s.pos};save();if(changed)render();return}}}catch(e){}},500);render();
-          </script></body></html>
-          HTML
+              override fun onCreate() {
+                  super.onCreate()
+                  wm = getSystemService(WINDOW_SERVICE) as WindowManager
+                  createBubble()
+              }
+
+              private fun overlayType(): Int = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY else WindowManager.LayoutParams.TYPE_PHONE
+              private fun params(width: Int, height: Int, gravity: Int = Gravity.TOP or Gravity.START) = WindowManager.LayoutParams(width, height, overlayType(), WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN, PixelFormat.TRANSLUCENT).apply { this.gravity = gravity; x = 24; y = 180 }
+
+              private fun createBubble() {
+                  val view = TextView(this).apply {
+                      text = "♫"
+                      textSize = 27f
+                      gravity = Gravity.CENTER
+                      setTextColor(Color.WHITE)
+                      typeface = Typeface.DEFAULT_BOLD
+                      background = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(Color.rgb(108,99,255), Color.rgb(0,188,212))).apply { shape = GradientDrawable.OVAL; setStroke(3, Color.WHITE) }
+                      elevation = 12f
+                  }
+                  val lp = params(62, 62)
+                  bubble = view; bubbleParams = lp
+                  view.setOnTouchListener { _, event ->
+                      when (event.action) {
+                          MotionEvent.ACTION_DOWN -> {
+                              downX = event.rawX; downY = event.rawY
+                              startX = lp.x; startY = lp.y; longPress = false
+                              handler.postDelayed({ longPress = true; showPanel() }, 550)
+                              true
+                          }
+                          MotionEvent.ACTION_MOVE -> {
+                              val dx = (event.rawX - downX).toInt(); val dy = (event.rawY - downY).toInt()
+                              if (kotlin.math.abs(dx) > 8 || kotlin.math.abs(dy) > 8) handler.removeCallbacksAndMessages(null)
+                              lp.x = (startX + dx).coerceAtLeast(0); lp.y = (startY + dy).coerceAtLeast(0)
+                              try { wm.updateViewLayout(view, lp) } catch (_: Exception) { }
+                              true
+                          }
+                          MotionEvent.ACTION_UP -> {
+                              handler.removeCallbacksAndMessages(null)
+                              if (!longPress && kotlin.math.abs(event.rawX - downX) < 12 && kotlin.math.abs(event.rawY - downY) < 12) command(PlaybackService.ACTION_TOGGLE)
+                              true
+                          }
+                          MotionEvent.ACTION_CANCEL -> { handler.removeCallbacksAndMessages(null); true }
+                          else -> true
+                      }
+                  }
+                  try { wm.addView(view, lp) } catch (_: Exception) { stopSelf() }
+              }
+
+              private fun showPanel() {
+                  if (panel != null) { hidePanel(); return }
+                  val box = LinearLayout(this).apply {
+                      orientation = LinearLayout.VERTICAL
+                      setPadding(14, 12, 14, 12)
+                      background = GradientDrawable().apply { setColor(Color.rgb(24, 29, 52)); cornerRadius = 24f; setStroke(2, Color.rgb(108,99,255)) }
+                      elevation = 16f
+                  }
+                  val title = TextView(this).apply { text = "مشغّل صوتي"; textSize = 16f; setTextColor(Color.WHITE); gravity = Gravity.CENTER; setPadding(8, 6, 8, 12) }
+                  box.addView(title)
+                  val row = LinearLayout(this).apply { gravity = Gravity.CENTER; orientation = LinearLayout.HORIZONTAL }
+                  addButton(row, "|◀") { command(PlaybackService.ACTION_PREVIOUS) }
+                  addButton(row, "▶ / ❚❚") { command(PlaybackService.ACTION_TOGGLE) }
+                  addButton(row, "▶|") { command(PlaybackService.ACTION_NEXT) }
+                  box.addView(row)
+                  val close = TextView(this).apply { text = "إخفاء اللوحة"; gravity = Gravity.CENTER; setTextColor(Color.LTGRAY); setPadding(8, 12, 8, 4); setOnClickListener { hidePanel() } }
+                  box.addView(close)
+                  val lp = params(WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT).apply { x = bubbleParams?.x ?: 24; y = (bubbleParams?.y ?: 180) + 72 }
+                  panel = box; panelParams = lp
+                  try { wm.addView(box, lp) } catch (_: Exception) { panel = null }
+              }
+
+              private fun addButton(row: LinearLayout, label: String, action: () -> Unit) {
+                  val b = TextView(this).apply {
+                      text = label; textSize = 16f; gravity = Gravity.CENTER; setTextColor(Color.WHITE); setPadding(12, 12, 12, 12)
+                      background = GradientDrawable().apply { setColor(Color.rgb(108,99,255)); cornerRadius = 16f }
+                      setOnClickListener { action() }
+                  }
+                  val lp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+                  lp.setMargins(4, 2, 4, 2); row.addView(b, lp)
+              }
+
+              private fun command(action: String) {
+                  val intent = Intent(this, PlaybackService::class.java).setAction(action)
+                  if (Build.VERSION.SDK_INT >= 26) startForegroundService(intent) else startService(intent)
+              }
+              private fun hidePanel() { panel?.let { try { wm.removeView(it) } catch (_: Exception) { } }; panel = null; panelParams = null }
+              override fun onDestroy() { hidePanel(); bubble?.let { try { wm.removeView(it) } catch (_: Exception) { } }; bubble = null; super.onDestroy() }
+              override fun onBind(intent: Intent?): IBinder? = null
+          }
+          EOF
+
+          cat > app/src/main/java/com/example/sawti/CircularSeekView.kt <<'EOF'
+          package com.example.sawti
+
+          import android.content.Context
+          import android.graphics.Canvas
+          import android.graphics.Paint
+          import android.graphics.RectF
+          import android.view.MotionEvent
+          import android.view.View
+          import kotlin.math.atan2
+          import kotlin.math.min
+
+          class CircularSeekView(context: Context) : View(context) {
+              var durationMs: Int = 0
+                  private set
+              var positionMs: Int = 0
+                  private set
+              var onSeek: ((Int) -> Unit)? = null
+              var onSeekFinished: ((Int) -> Unit)? = null
+              private val track = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF444B78.toInt(); style = Paint.Style.STROKE; strokeWidth = 13f; strokeCap = Paint.Cap.ROUND }
+              private val progress = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF00D2BE.toInt(); style = Paint.Style.STROKE; strokeWidth = 13f; strokeCap = Paint.Cap.ROUND }
+              private val knob = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFFFFFFF.toInt(); style = Paint.Style.FILL }
+              private val timePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFFFFFFF.toInt(); textAlign = Paint.Align.CENTER; textSize = 20f; typeface = android.graphics.Typeface.DEFAULT_BOLD }
+              private val hintPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFB9BEDB.toInt(); textAlign = Paint.Align.CENTER; textSize = 12f }
+              private var dragging = false
+
+              fun setPlaybackPosition(position: Int, duration: Int) {
+                  durationMs = duration.coerceAtLeast(0)
+                  positionMs = position.coerceIn(0, durationMs)
+                  invalidate()
+              }
+
+              override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+                  val desired = (190 * resources.displayMetrics.density).toInt()
+                  val w = resolveSize(desired, widthMeasureSpec)
+                  val h = resolveSize(desired, heightMeasureSpec)
+                  val size = min(w, h)
+                  setMeasuredDimension(size, size)
+              }
+
+              override fun onDraw(canvas: Canvas) {
+                  super.onDraw(canvas)
+                  val cx = width / 2f; val cy = height / 2f
+                  val radius = min(width, height) * 0.39f
+                  val rect = RectF(cx - radius, cy - radius, cx + radius, cy + radius)
+                  canvas.drawArc(rect, -90f, 360f, false, track)
+                  val sweep = if (durationMs > 0) 360f * positionMs / durationMs else 0f
+                  canvas.drawArc(rect, -90f, sweep, false, progress)
+                  val angle = Math.toRadians((sweep - 90f).toDouble())
+                  canvas.drawCircle(cx + radius * kotlin.math.cos(angle).toFloat(), cy + radius * kotlin.math.sin(angle).toFloat(), 8f, knob)
+                  canvas.drawText(format(positionMs), cx, cy - 2f, timePaint)
+                  canvas.drawText("من ${format(durationMs)}", cx, cy + 23f, hintPaint)
+              }
+
+              override fun onTouchEvent(event: MotionEvent): Boolean {
+                  when (event.action) {
+                      MotionEvent.ACTION_DOWN -> { dragging = true; parent?.requestDisallowInterceptTouchEvent(true); updateFromTouch(event.x, event.y); return true }
+                      MotionEvent.ACTION_MOVE -> { if (dragging) updateFromTouch(event.x, event.y); return true }
+                      MotionEvent.ACTION_UP -> { if (dragging) updateFromTouch(event.x, event.y); dragging = false; onSeekFinished?.invoke(positionMs); performClick(); return true }
+                      MotionEvent.ACTION_CANCEL -> { dragging = false; return true }
+                  }
+                  return true
+              }
+
+              override fun performClick(): Boolean { super.performClick(); return true }
+
+              private fun updateFromTouch(x: Float, y: Float) {
+                  if (durationMs <= 0) return
+                  val dx = x - width / 2f; val dy = y - height / 2f
+                  var degrees = Math.toDegrees(atan2(dy.toDouble(), dx.toDouble())).toFloat() + 90f
+                  if (degrees < 0f) degrees += 360f
+                  positionMs = (durationMs * (degrees / 360f)).toInt().coerceIn(0, durationMs)
+                  invalidate()
+                  onSeek?.invoke(positionMs)
+              }
+
+              private fun format(ms: Int): String {
+                  val seconds = ms.coerceAtLeast(0) / 1000
+                  return String.format(java.util.Locale.US, "%02d:%02d", seconds / 60, seconds % 60)
+              }
+          }
+          EOF
+
+          cat > app/src/main/java/com/example/sawti/MainActivity.kt <<'EOF'
+          package com.example.sawti
+
+          import android.Manifest
+          import android.app.Activity
+          import android.app.AlertDialog
+          import android.content.BroadcastReceiver
+          import android.content.Context
+          import android.content.Intent
+          import android.content.IntentFilter
+          import android.content.pm.PackageManager
+          import android.graphics.Color
+          import android.graphics.Typeface
+          import android.graphics.drawable.GradientDrawable
+          import android.net.Uri
+          import android.os.Build
+          import android.os.Bundle
+          import android.provider.OpenableColumns
+          import android.provider.Settings
+          import android.view.Gravity
+          import android.view.View
+          import android.view.ViewGroup
+          import android.widget.*
+
+          class MainActivity : Activity() {
+              private val uris = ArrayList<String>()
+              private val names = ArrayList<String>()
+              private lateinit var listBox: LinearLayout
+              private lateinit var titleView: TextView
+              private lateinit var stateView: TextView
+              private lateinit var timeView: TextView
+              private lateinit var circularSeek: CircularSeekView
+              private lateinit var playButton: TextView
+              private lateinit var speedButton: TextView
+              private var currentIndex = -1
+              private var duration = 0
+              private var currentPosition = 0
+              private var playing = false
+              private var speed = 1f
+              private var userSeeking = false
+              private var receiverRegistered = false
+
+              private val stateReceiver = object : BroadcastReceiver() {
+                  override fun onReceive(context: Context?, intent: Intent?) {
+                      if (intent?.action != PlaybackService.BROADCAST_STATE) return
+                      val incoming = intent.getStringArrayListExtra(PlaybackService.EXTRA_URIS) ?: arrayListOf()
+                      if (incoming != uris) {
+                          uris.clear(); uris.addAll(incoming)
+                          names.clear(); uris.forEach { names.add(displayName(Uri.parse(it))) }
+                          renderPlaylist()
+                      }
+                      val previousIndex = currentIndex
+                      currentIndex = intent.getIntExtra(PlaybackService.EXTRA_INDEX, -1)
+                      if (previousIndex != currentIndex) renderPlaylist()
+                      currentPosition = intent.getIntExtra(PlaybackService.EXTRA_POSITION, 0)
+                      duration = intent.getIntExtra("duration", 0)
+                      playing = intent.getBooleanExtra("playing", false)
+                      speed = intent.getFloatExtra(PlaybackService.EXTRA_SPEED, 1f)
+                      updatePlayerUi()
+                  }
+              }
+
+              override fun onCreate(savedInstanceState: Bundle?) {
+                  super.onCreate(savedInstanceState)
+                  window.statusBarColor = Color.rgb(16, 20, 38)
+                  window.navigationBarColor = Color.rgb(16, 20, 38)
+                  buildUi()
+                  registerStateReceiver()
+                  startPlaybackService()
+                  requestNotificationPermission()
+              }
+
+              private fun buildUi() {
+                  val root = LinearLayout(this).apply {
+                      orientation = LinearLayout.VERTICAL
+                      setPadding(20, 18, 20, 18)
+                      layoutDirection = View.LAYOUT_DIRECTION_RTL
+                      background = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(Color.rgb(16,20,38), Color.rgb(34,39,75), Color.rgb(20,25,48)))
+                  }
+                  val top = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+                  val heading = TextView(this).apply { text = "صوتي"; textSize = 27f; setTextColor(Color.WHITE); typeface = Typeface.DEFAULT_BOLD }
+                  top.addView(heading, LinearLayout.LayoutParams(0, -2, 1f))
+                  speedButton = button("السرعة 1.0×", 14).apply { setOnClickListener { showSpeedMenu(it) } }
+                  top.addView(speedButton)
+                  root.addView(top)
+                  root.addView(label("مشغّل صوتك، في كل مكان", 14, Color.LTGRAY).apply { setPadding(0, 3, 0, 16) })
+
+                  val card = LinearLayout(this).apply {
+                      orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; setPadding(18, 22, 18, 20)
+                      background = GradientDrawable().apply { setColor(Color.argb(220, 34, 41, 76)); cornerRadius = 28f; setStroke(1, Color.rgb(94, 101, 170)) }
+                  }
+                  titleView = label("لم تختر ملفًا صوتيًا بعد", 19, Color.WHITE).apply { typeface = Typeface.DEFAULT_BOLD; gravity = Gravity.CENTER; maxLines = 2 }
+                  card.addView(titleView, LinearLayout.LayoutParams(-1, -2))
+                  stateView = label("جاهز للتشغيل", 13, Color.LTGRAY).apply { gravity = Gravity.CENTER; setPadding(0, 8, 0, 14) }
+                  card.addView(stateView)
+                  circularSeek = CircularSeekView(this).apply {
+                      onSeek = { requestedPosition ->
+                          userSeeking = true
+                          timeView.text = "${formatTime(requestedPosition)} / ${formatTime(duration)}"
+                      }
+                      onSeekFinished = { requestedPosition ->
+                          userSeeking = false
+                          if (duration > 0) command(PlaybackService.ACTION_SEEK) { putExtra(PlaybackService.EXTRA_POSITION, requestedPosition) }
+                      }
+                  }
+                  card.addView(circularSeek, LinearLayout.LayoutParams(190.dp(), 190.dp()).apply { gravity = Gravity.CENTER })
+                  timeView = label("00:00 / 00:00", 12, Color.LTGRAY).apply { gravity = Gravity.CENTER; setPadding(0, 2, 0, 12) }
+                  card.addView(timeView)
+                  val controls = LinearLayout(this).apply { gravity = Gravity.CENTER; orientation = LinearLayout.HORIZONTAL }
+                  controls.addView(button("السابق", 13).apply { setOnClickListener { command(PlaybackService.ACTION_PREVIOUS) } })
+                  playButton = button("▶ تشغيل", 16).apply { setOnClickListener { command(PlaybackService.ACTION_TOGGLE) } }
+                  controls.addView(playButton, LinearLayout.LayoutParams(0, 52, 1f))
+                  controls.addView(button("التالي", 13).apply { setOnClickListener { command(PlaybackService.ACTION_NEXT) } })
+                  card.addView(controls)
+                  val secondary = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER; setPadding(0, 14, 0, 0) }
+                  secondary.addView(button("إيقاف نهائي", 12).apply { setOnClickListener { command(PlaybackService.ACTION_STOP) } })
+                  secondary.addView(button("الفقاعة العائمة", 12).apply { setOnClickListener { enableFloating() } })
+                  card.addView(secondary)
+                  root.addView(card)
+
+                  val listHeader = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(0, 20, 0, 10) }
+                  listHeader.addView(label("قائمة التشغيل", 20, Color.WHITE).apply { typeface = Typeface.DEFAULT_BOLD }, LinearLayout.LayoutParams(0, -2, 1f))
+                  listHeader.addView(button("＋ إضافة ملفات", 13).apply { setOnClickListener { chooseAudio() } })
+                  root.addView(listHeader)
+                  val scroll = ScrollView(this)
+                  listBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+                  scroll.addView(listBox)
+                  root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+                  setContentView(root)
+                  renderPlaylist()
+              }
+
+              private fun label(text: String, size: Int, color: Int) = TextView(this).apply { this.text = text; textSize = size.toFloat(); setTextColor(color) }
+              private fun button(text: String, size: Int) = TextView(this).apply {
+                  this.text = text; textSize = size.toFloat(); setTextColor(Color.WHITE); gravity = Gravity.CENTER; setPadding(13, 10, 13, 10)
+                  background = GradientDrawable().apply { setColor(if (text.contains("تشغيل") || text.contains("إضافة")) Color.rgb(108,99,255) else Color.rgb(53,61,105)); cornerRadius = 17f }
+                  val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT); lp.setMargins(4, 3, 4, 3); layoutParams = lp
+              }
+
+              private fun chooseAudio() {
+                  val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                      addCategory(Intent.CATEGORY_OPENABLE); type = "audio/*"; putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+                  }
+                  startActivityForResult(intent, 100)
+              }
+
+              @Deprecated("Deprecated by Android API; retained for broad device compatibility")
+              override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+                  super.onActivityResult(requestCode, resultCode, data)
+                  if (requestCode != 100 || resultCode != RESULT_OK || data == null) return
+                  val selected = ArrayList<Uri>()
+                  data.clipData?.let { clip -> for (i in 0 until clip.itemCount) selected.add(clip.getItemAt(i).uri) }
+                      ?: data.data?.let { selected.add(it) }
+                  selected.forEach { uri ->
+                      try { contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) { }
+                      if (!uris.contains(uri.toString())) {
+                          uris.add(uri.toString()); names.add(displayName(uri))
+                          command(PlaybackService.ACTION_ADD) { putExtra(PlaybackService.EXTRA_URI, uri.toString()) }
+                      }
+                  }
+                  renderPlaylist()
+              }
+
+              private fun displayName(uri: Uri): String {
+                  var result = uri.lastPathSegment ?: "ملف صوتي"
+                  try { contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { if (it.moveToFirst()) result = it.getString(0) ?: result } } catch (_: Exception) { }
+                  return result.substringAfterLast('/')
+              }
+
+              private fun renderPlaylist() {
+                  if (!::listBox.isInitialized) return
+                  listBox.removeAllViews()
+                  if (uris.isEmpty()) {
+                      listBox.addView(label("أضف ملفات صوتية من جهازك لتظهر هنا.", 14, Color.LTGRAY).apply { gravity = Gravity.CENTER; setPadding(8, 28, 8, 28) })
+                      return
+                  }
+                  uris.forEachIndexed { index, uri ->
+                      val row = LinearLayout(this).apply {
+                          orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(10, 8, 10, 8)
+                          background = GradientDrawable().apply { setColor(if (index == currentIndex) Color.rgb(58,62,111) else Color.argb(180,35,41,72)); cornerRadius = 18f }
+                      }
+                      val info = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(4, 2, 4, 2) }
+                      info.addView(label(if (index == currentIndex) "♫  ${names.getOrNull(index) ?: "ملف صوتي"}" else (names.getOrNull(index) ?: "ملف صوتي"), 14, Color.WHITE).apply { maxLines = 2 })
+                      info.addView(label(if (index == currentIndex) "المسار الحالي" else "اضغط للتشغيل", 11, Color.LTGRAY))
+                      info.setOnClickListener { command(PlaybackService.ACTION_PLAY_INDEX) { putExtra(PlaybackService.EXTRA_INDEX, index) } }
+                      row.addView(info, LinearLayout.LayoutParams(0, -2, 1f))
+                      row.addView(smallButton("↑") { if (index > 0) command(PlaybackService.ACTION_MOVE) { putExtra(PlaybackService.EXTRA_FROM, index); putExtra(PlaybackService.EXTRA_TO, index - 1) } })
+                      row.addView(smallButton("↓") { if (index < uris.lastIndex) command(PlaybackService.ACTION_MOVE) { putExtra(PlaybackService.EXTRA_FROM, index); putExtra(PlaybackService.EXTRA_TO, index + 1) } })
+                      row.addView(smallButton("×") { command(PlaybackService.ACTION_REMOVE) { putExtra(PlaybackService.EXTRA_INDEX, index) } })
+                      val lp = LinearLayout.LayoutParams(-1, -2); lp.setMargins(0, 4, 0, 4); listBox.addView(row, lp)
+                  }
+              }
+
+              private fun smallButton(text: String, action: () -> Unit) = TextView(this).apply {
+                  this.text = text; textSize = 18f; gravity = Gravity.CENTER; setTextColor(Color.WHITE); setPadding(9, 7, 9, 7)
+                  background = GradientDrawable().apply { setColor(Color.rgb(75,82,135)); cornerRadius = 12f }
+                  setOnClickListener { action() }
+              }
+
+              private fun showSpeedMenu(anchor: View) {
+                  val speeds = arrayOf("0.5×", "0.75×", "1.0×", "1.25×", "1.5×", "1.75×", "2.0×")
+                  val values = floatArrayOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f)
+                  AlertDialog.Builder(this).setTitle("سرعة التشغيل").setItems(speeds) { _, which ->
+                      speed = values[which]
+                      command(PlaybackService.ACTION_SPEED) { putExtra(PlaybackService.EXTRA_SPEED, speed) }
+                      speedButton.text = "السرعة ${speed}×"
+                  }.setNegativeButton("إلغاء", null).show()
+              }
+
+              private fun enableFloating() {
+                  if (!Settings.canDrawOverlays(this)) {
+                      startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
+                      Toast.makeText(this, "فعّل السماح بالظهور فوق التطبيقات ثم ارجع واضغط الزر مرة أخرى", Toast.LENGTH_LONG).show()
+                      return
+                  }
+                  try { startService(Intent(this, FloatingWidgetService::class.java)); Toast.makeText(this, "تم تشغيل الفقاعة العائمة", Toast.LENGTH_SHORT).show() }
+                  catch (_: Exception) { Toast.makeText(this, "تعذّر تشغيل الفقاعة", Toast.LENGTH_SHORT).show() }
+              }
+
+              private fun command(action: String, extras: Intent.() -> Unit = {}) {
+                  val intent = Intent(this, PlaybackService::class.java).setAction(action)
+                  try { extras(intent) } catch (_: Exception) { }
+                  startPlaybackService(intent)
+              }
+
+              private fun startPlaybackService(intent: Intent = Intent(this, PlaybackService::class.java)) {
+                  try { if (Build.VERSION.SDK_INT >= 26) startForegroundService(intent) else startService(intent) }
+                  catch (_: Exception) { Toast.makeText(this, "تعذّر بدء خدمة الصوت", Toast.LENGTH_SHORT).show() }
+              }
+
+              private fun registerStateReceiver() {
+                  val filter = IntentFilter(PlaybackService.BROADCAST_STATE)
+                  if (Build.VERSION.SDK_INT >= 33) registerReceiver(stateReceiver, filter, RECEIVER_NOT_EXPORTED) else registerReceiver(stateReceiver, filter)
+                  receiverRegistered = true
+              }
+
+              private fun updatePlayerUi() {
+                  if (!::titleView.isInitialized) return
+                  titleView.text = names.getOrNull(currentIndex) ?: "لم تختر ملفًا صوتيًا بعد"
+                  stateView.text = when { playing -> "قيد التشغيل"; currentIndex >= 0 -> "متوقف مؤقتًا أو جاهز"; else -> "جاهز للتشغيل" }
+                  playButton.text = if (playing) "❚❚ إيقاف مؤقت" else "▶ تشغيل"
+                  speedButton.text = "السرعة ${speed}×"
+                  if (!userSeeking) circularSeek.setPlaybackPosition(currentPosition, duration)
+                  timeView.text = "${formatTime(currentPosition)} / ${formatTime(duration)}"
+              }
+
+              private fun Int.dp(): Int = (this * resources.displayMetrics.density).toInt()
+
+              private fun formatTime(ms: Int): String {
+                  val seconds = (ms.coerceAtLeast(0) / 1000)
+                  return String.format(java.util.Locale.US, "%02d:%02d", seconds / 60, seconds % 60)
+              }
+
+              private fun requestNotificationPermission() {
+                  if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 501)
+              }
+
+              override fun onDestroy() {
+                  if (receiverRegistered) try { unregisterReceiver(stateReceiver) } catch (_: Exception) { }
+                  super.onDestroy()
+              }
+          }
+          EOF
+
+      - name: Validate generated project files
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s app/src/main/AndroidManifest.xml
+          test -s app/src/main/java/com/example/sawti/MainActivity.kt
+          test -s app/src/main/java/com/example/sawti/PlaybackService.kt
+          test -s app/src/main/java/com/example/sawti/FloatingWidgetService.kt
+          echo "Project source files generated. Starting Gradle build."
 
       - name: Build debug APK
-        working-directory: proj
-        run: gradle assembleDebug --no-daemon --stacktrace
+        run: gradle --no-daemon --stacktrace assembleDebug
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: FloatPlayer-APK
-          path: proj/app/build/outputs/apk/debug/app-debug.apk
-
-      - name: Publish APK to Releases
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release create "v${{ github.run_number }}" proj/app/build/outputs/apk/debug/app-debug.apk --title "FloatPlayer v${{ github.run_number }}" --notes "ملف التثبيت app-debug.apk"
+          name: sawti-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
