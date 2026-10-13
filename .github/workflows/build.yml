@@ -300,6 +300,7 @@ jobs:
           cat > app/src/main/java/com/floatplayer/PlayerService.kt <<'EOF'
           package com.floatplayer
 
+          import android.app.AlertDialog
           import android.app.Notification
           import android.app.NotificationChannel
           import android.app.NotificationManager
@@ -343,6 +344,7 @@ jobs:
               lateinit var wm: WindowManager
               private var mp: MediaPlayer? = null
               private var ready = false
+              private var playbackSpeed = 1.0f
               private var queue = JSONArray()
               private var idx = 0
               var curUri = ""
@@ -423,6 +425,7 @@ jobs:
                       player.setDataSource(this, Uri.parse(curUri))
                       player.setOnPreparedListener {
                           ready = true
+                          try { it.playbackParams = it.playbackParams.setSpeed(playbackSpeed) } catch (_: Exception) {}
                           if (startPos > 0) it.seekTo(startPos.coerceAtMost(it.duration))
                           it.start()
                           bubble?.invalidate()
@@ -445,6 +448,16 @@ jobs:
                   refreshPlaylistPanel()
               }
 
+              fun playbackSpeedLabel(): String = when (playbackSpeed) {
+                  0.5f -> "0.5×"
+                  0.75f -> "0.75×"
+                  1.0f -> "1.0×"
+                  1.25f -> "1.25×"
+                  1.5f -> "1.5×"
+                  1.75f -> "1.75×"
+                  else -> "2.0×"
+              }
+
               fun pos(): Int = try { if (ready) mp?.currentPosition ?: 0 else 0 } catch (_: Exception) { 0 }
               fun dur(): Int = try { if (ready) mp?.duration ?: 0 else 0 } catch (_: Exception) { 0 }
               fun playing(): Boolean = try { ready && (mp?.isPlaying ?: false) } catch (_: Exception) { false }
@@ -456,6 +469,29 @@ jobs:
                       if (m.isPlaying) m.pause() else m.start()
                   } catch (_: Exception) {}
                   bubble?.invalidate()
+              }
+
+              fun showSpeedPicker() {
+                  val speeds = floatArrayOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f)
+                  val labels = arrayOf("0.5×", "0.75×", "1.0× (عادية)", "1.25×", "1.5×", "1.75×", "2.0×")
+                  val selected = speeds.indices.minByOrNull { kotlin.math.abs(speeds[it] - playbackSpeed) } ?: 2
+                  AlertDialog.Builder(this)
+                      .setTitle("سرعة التشغيل")
+                      .setSingleChoiceItems(labels, selected) { dialog, which ->
+                          playbackSpeed = speeds[which]
+                          try {
+                              val player = mp
+                              if (ready && player != null) {
+                                  player.playbackParams = player.playbackParams.setSpeed(playbackSpeed)
+                              }
+                          } catch (_: Exception) {
+                              Toast.makeText(this, "تعذّر تغيير السرعة لهذا الملف", Toast.LENGTH_SHORT).show()
+                          }
+                          bubble?.invalidate()
+                          dialog.dismiss()
+                      }
+                      .setNegativeButton("إلغاء", null)
+                      .show()
               }
 
               fun seekBy(ms: Int) = seekTo(pos() + ms)
@@ -854,6 +890,13 @@ jobs:
                   pt.textSize = 13*d
                   cv.drawText("×", sz-15*d, 19*d, pt)
 
+                  pt.color = Color.parseColor("#187a9f")
+                  cv.drawRoundRect(RectF(c-22*d, 4*d, c+22*d, 26*d), 7*d, 7*d, pt)
+                  pt.color = Color.WHITE
+                  pt.textSize = 10*d
+                  pt.typeface = Typeface.DEFAULT_BOLD
+                  cv.drawText("${svc.playbackSpeedLabel()}", c, 18*d, pt)
+
                   val by = sz - 20*d
                   button(cv, c-37*d, by, "A", if (svc.markA >= 0) "#d63384" else "#31516b")
                   button(cv, c, by, "B", if (svc.loopB >= 0) "#c58b00" else "#31516b")
@@ -881,6 +924,7 @@ jobs:
 
                   if (dist(sz-15*d, 15*d) < 17*d) return 4
                   if (dist(15*d, 15*d) < 17*d) return 5
+                  if (dist(c, 15*d) < 25*d) return 10
                   val by = sz-20*d
                   if (dist(c-37*d, by) < 18*d) return 7
                   if (dist(c, by) < 18*d) return 8
@@ -955,6 +999,7 @@ jobs:
                                   7 -> svc.setA()
                                   8 -> svc.setB()
                                   9 -> svc.cancelAB()
+                                  10 -> svc.showSpeedPicker()
                               }
                           }
                           invalidate()
