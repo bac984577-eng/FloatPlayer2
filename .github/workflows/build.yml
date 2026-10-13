@@ -35,6 +35,7 @@ jobs:
           mkdir -p proj/app/src/main/java/com/floatplayer
           mkdir -p proj/app/src/main/assets
           mkdir -p proj/app/src/main/res/values
+          mkdir -p proj/app/src/main/res/drawable
           cd proj
 
           cat > settings.gradle <<'EOF'
@@ -100,6 +101,7 @@ jobs:
               <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
               <application
                   android:label="مشغّل الدراسة"
+                  android:icon="@drawable/ic_launcher"
                   android:allowBackup="false"
                   android:supportsRtl="true"
                   android:theme="@android:style/Theme.Material.Light.NoActionBar">
@@ -118,6 +120,19 @@ jobs:
                       android:foregroundServiceType="mediaPlayback"/>
               </application>
           </manifest>
+          EOF
+
+          cat > app/src/main/res/drawable/ic_launcher.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="108dp"
+              android:height="108dp"
+              android:viewportWidth="108"
+              android:viewportHeight="108">
+              <path android:fillColor="#0E2233" android:pathData="M0,0h108v108h-108z"/>
+              <path android:fillColor="#4CC2E8" android:pathData="M54,17C34.1,17 18,33.1 18,53v17c0,7.2 5.8,13 13,13h4c4.4,0 8,-3.6 8,-8V60c0,-4.4 -3.6,-8 -8,-8h-5v1C30,37.6 40.7,27 54,27s24,10.6 24,26v-1h-5c-4.4,0 -8,3.6 -8,8v15c0,4.4 3.6,8 8,8h4c7.2,0 13,-5.8 13,-13V53C90,33.1 73.9,17 54,17z"/>
+              <path android:fillColor="#FFFFFF" android:pathData="M48,42v27.1c-2.1,-1.6 -4.9,-2.3 -7.8,-1.7 -5,1 -8.1,5.1 -7.1,9.2 1,4.1 5.8,6.5 10.8,5.5 4.2,-0.9 7.1,-3.9 7.3,-7.2V52l19,-4.2v16.3c-2.1,-1.6 -4.9,-2.3 -7.8,-1.7 -5,1 -8.1,5.1 -7.1,9.2 1,4.1 5.8,6.5 10.8,5.5 4.2,-0.9 7.1,-3.9 7.3,-7.2V35z"/>
+          </vector>
           EOF
 
           cat > app/src/main/res/values/styles.xml <<'EOF'
@@ -145,6 +160,7 @@ jobs:
           import android.provider.OpenableColumns
           import android.provider.Settings
           import android.webkit.JavascriptInterface
+          import android.webkit.WebChromeClient
           import android.webkit.WebView
           import android.widget.Toast
           import org.json.JSONArray
@@ -160,6 +176,7 @@ jobs:
                   web = WebView(this)
                   web.settings.javaScriptEnabled = true
                   web.settings.domStorageEnabled = true
+                  web.webChromeClient = WebChromeClient()
                   web.setBackgroundColor(Color.rgb(14, 34, 51))
                   web.addJavascriptInterface(Bridge(), "Android")
                   setContentView(web)
@@ -753,7 +770,8 @@ jobs:
           .card{display:flex;align-items:center;gap:10px;background:var(--card);border-radius:18px;padding:12px 14px;margin:8px 0}
           .card .t{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
           .card small{display:block;color:var(--mu)}
-          .ic{border:0;border-radius:12px;width:40px;height:40px;font-size:17px;background:#e5473f33;color:var(--tx)}
+          .ic{border:0;border-radius:12px;width:40px;height:40px;font-size:17px;background:#e5473f33;color:var(--tx);flex-shrink:0}
+          .ic.rename{background:#4cc2e833}
           .cur{outline:2px solid var(--b)}
           .note{color:var(--mu);font-size:13px;padding:6px 4px}
           </style>
@@ -792,6 +810,14 @@ jobs:
           function tap(lid,tid){play(lid,tid,S.last&&S.last.t==tid?S.last.pos:0);}
           function resume(){const x=S.last;if(x&&L(x.l))play(x.l,x.t,x.pos);}
           function openL(id){S.open=id;render();}
+          function renameL(id){
+            const l=L(id);if(!l)return;
+            const n=prompt('اكتب الاسم الجديد لقائمة التشغيل:',l.name);
+            if(n===null)return;
+            const v=n.trim();
+            if(!v){alert('اكتب اسمًا غير فارغ.');return;}
+            l.name=v;save();render();
+          }
           function delL(id){
             if(!confirm('حذف القائمة؟'))return;
             S.lists=S.lists.filter(l=>l.id!=id);save();render();
@@ -811,12 +837,13 @@ jobs:
               a.innerHTML='<button class="btn" onclick="addNew()">＋ إضافة صوتية / قائمة جديدة</button>'+
                 (x?`<button class="btn s" onclick="resume()">▶ متابعة آخر صوتية (${fmt(S.last.pos)})</button>`:'')+
                 '<h3>قوائم التشغيل</h3>'+
-                (S.lists.map(l=>`<div class="card${S.last&&S.last.l==l.id?' cur':''}" onclick="openL('${l.id}')"><span style="font-size:24px">📁</span><div class="t">${esc(l.name)}<small>${l.tracks.length} ملف</small></div><button class="ic" onclick="event.stopPropagation();delL('${l.id}')">🗑</button></div>`).join('')||'<div class="note">لا توجد قوائم بعد. أضف صوتياتك للبدء.</div>');
+                (S.lists.map(l=>`<div class="card${S.last&&S.last.l==l.id?' cur':''}" onclick="openL('${l.id}')"><span style="font-size:24px">📁</span><div class="t">${esc(l.name)}<small>${l.tracks.length} ملف</small></div><button class="ic rename" title="إعادة تسمية" onclick="event.stopPropagation();renameL('${l.id}')">✏️</button><button class="ic" title="حذف القائمة" onclick="event.stopPropagation();delL('${l.id}')">🗑</button></div>`).join('')||'<div class="note">لا توجد قوائم بعد. أضف صوتياتك للبدء.</div>');
             }else{
               const l=L(S.open);
               if(!l){S.open=null;render();return;}
               a.innerHTML='<button class="btn s" onclick="goBack()">→ رجوع</button>'+
                 `<h3>📁 ${esc(l.name)}</h3>`+
+                `<button class="btn s" onclick="renameL('${l.id}')">✏️ إعادة تسمية قائمة التشغيل</button>`+
                 `<button class="btn" onclick="addTo('${l.id}')">＋ إضافة ملفات للقائمة</button>`+
                 (l.tracks.map(t=>`<div class="card${S.last&&S.last.t==t.id?' cur':''}" onclick="tap('${l.id}','${t.id}')"><span style="font-size:22px">🎵</span><div class="t">${esc(t.name)}</div><button class="ic" onclick="event.stopPropagation();delT('${l.id}','${t.id}')">🗑</button></div>`).join('')||'<div class="note">القائمة فارغة.</div>');
             }
