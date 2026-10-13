@@ -1,867 +1,1754 @@
-name: Build Arabic Audio Player APK
+name: Build Android APK
 
 on:
-  workflow_dispatch:
   push:
-    branches: ["main", "master"]
+    branches: [main, master]
+  workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Java 17
+      - name: Setup JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: '17'
 
-      - name: Set up Gradle
+      - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: "8.9"
+          gradle-version: '8.7'
+
+      - name: Accept Android licenses
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
 
       - name: Generate Android project
         shell: bash
         run: |
-          set -euo pipefail
-          mkdir -p app/src/main/java/com/example/sawti app/src/main/res/values
+          mkdir -p proj/app/src/main/java/com/floatplayer
+          mkdir -p proj/app/src/main/assets
+          mkdir -p proj/app/src/main/res/values
+          mkdir -p proj/app/src/main/res/drawable-nodpi
+          mkdir -p proj/app/src/main/res/mipmap-anydpi-v26
+          cd proj
 
-          cat > settings.gradle.kts <<'EOF'
-          pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
+          cat > settings.gradle <<'EOF'
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
           dependencyResolutionManagement {
-              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
-              repositories { google(); mavenCentral() }
+              repositories {
+                  google()
+                  mavenCentral()
+              }
           }
-          rootProject.name = "SawtiAudioPlayer"
-          include(":app")
+          rootProject.name = 'FloatPlayer'
+          include ':app'
           EOF
 
-          cat > build.gradle.kts <<'EOF'
+          cat > build.gradle <<'EOF'
           plugins {
-              id("com.android.application") version "8.7.3" apply false
-              id("org.jetbrains.kotlin.android") version "2.0.21" apply false
+              id 'com.android.application' version '8.5.2' apply false
+              id 'org.jetbrains.kotlin.android' version '1.9.24' apply false
           }
           EOF
 
-          cat > app/build.gradle.kts <<'EOF'
+          cat > gradle.properties <<'EOF'
+          org.gradle.jvmargs=-Xmx3g -Dfile.encoding=UTF-8
+          android.useAndroidX=true
+          kotlin.code.style=official
+          EOF
+
+          cat > app/build.gradle <<'EOF'
           plugins {
-              id("com.android.application")
-              id("org.jetbrains.kotlin.android")
+              id 'com.android.application'
+              id 'org.jetbrains.kotlin.android'
           }
           android {
-              namespace = "com.example.sawti"
-              compileSdk = 35
+              namespace 'com.floatplayer'
+              compileSdk 34
               defaultConfig {
-                  applicationId = "com.example.sawti"
-                  minSdk = 23
-                  targetSdk = 35
-                  versionCode = 1
-                  versionName = "1.0.0"
+                  applicationId 'com.floatplayer'
+                  minSdk 26
+                  targetSdk 33
+                  versionCode 1
+                  versionName '1.0'
               }
-              buildFeatures { buildConfig = true }
               compileOptions {
-                  sourceCompatibility = JavaVersion.VERSION_17
-                  targetCompatibility = JavaVersion.VERSION_17
+                  sourceCompatibility JavaVersion.VERSION_17
+                  targetCompatibility JavaVersion.VERSION_17
               }
-              kotlinOptions { jvmTarget = "17" }
+              kotlinOptions { jvmTarget = '17' }
           }
           EOF
 
           cat > app/src/main/AndroidManifest.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-              <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-              <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
-              <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-              <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
-              <uses-permission android:name="android.permission.WAKE_LOCK" />
+              <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
+              <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+              <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>
+              <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
               <application
-                  android:allowBackup="true"
-                  android:label="صوتي - مشغّل الصوت"
+                  android:label="مشغّل الدراسة"
+                  android:icon="@mipmap/ic_launcher"
+                  android:roundIcon="@mipmap/ic_launcher_round"
+                  android:allowBackup="false"
                   android:supportsRtl="true"
-                  android:theme="@style/AppTheme"
-                  android:usesCleartextTraffic="false">
+                  android:theme="@android:style/Theme.Material.Light.NoActionBar">
                   <activity
                       android:name=".MainActivity"
-                      android:exported="true">
+                      android:exported="true"
+                      android:configChanges="orientation|screenSize|keyboardHidden">
                       <intent-filter>
-                          <action android:name="android.intent.action.MAIN" />
-                          <category android:name="android.intent.category.LAUNCHER" />
+                          <action android:name="android.intent.action.MAIN"/>
+                          <category android:name="android.intent.category.LAUNCHER"/>
                       </intent-filter>
                   </activity>
                   <service
-                      android:name=".PlaybackService"
+                      android:name=".PlayerService"
                       android:exported="false"
-                      android:foregroundServiceType="mediaPlayback" />
-                  <service
-                      android:name=".FloatingWidgetService"
-                      android:exported="false" />
+                      android:foregroundServiceType="mediaPlayback"/>
               </application>
           </manifest>
           EOF
 
+          base64 -d > app/src/main/res/drawable-nodpi/ic_fg.png <<'EOF'
+          iVBORw0KGgoAAAANSUhEUgAAAUQAAAFECAIAAADQiNCRAABkrklEQVR42u29abBl13Ue9q11zr1v
+          6HludKMxEhMBzuIgyCRlWSrZkeSU4zhx2WXFdtlJ5Epl8FAVV5xKVWL9SKWcH7YUJ44tO7ZVdjxJ
+          skUptilRHDRApEgCBIiBIGZ0Az0Pr99w7zlr5cee1t7n3G6Ac7+3l1rg7ffuPXfo++01fx/tO/5B
+          VKtW7dY3rh9BtWoVzNWqVatgrlatWgVztWrVKpirVatgrlatWgVztWrVKpirVatWwVytWgVztWrV
+          KpirVatWwVytWrUK5mrVqlUwV6tWwVytWrUK5mrVqlUwV6tWrYK5WrUK5mrVqlUwV6tWrYK5WrVq
+          FczVqlUwV6tWrYK5WrVqFczVqlWrYK5WrVoFc7VqFczVqlWrYK5WrVoFc7Vq1SqYq1WrYK5WrVoF
+          c7Vq1SqYq1WrVsFcrVoFc7Vq1SqYq1WrVsFcrVq1CuZq1apVMFerVsFcrVq1CuZq1apVMFerVq2C
+          uVq1CuZq1apVMFerVq2CuVq1ahXM1apVq2CuVq2CuVq1ahXM1apVq2CuVq1aBXO1ahXM1apVq2Cu
+          Vq1aBXO1atUqmKtVq2CuVq1aBXO1atUqmKtVq1bBXK1atQrmatUqmKtVq1bBXK1atQrmatWqVTBX
+          q1bBXK1atQrmatWqVTBXq1atgrlatR1ubf0Ivhmj+D+afqjDO+R30x3z0VDxZhd+NNgxn0sF8/cg
+          gAEAAvQKEQBgAsH/8XdSSLibKlTBBCY0lO6g2+uj8ehVaKcqgII4vFmidAcAvQJQBQQgEIMaSh9u
+          BXYF83cAxgLMBQAawp4JDk+xf6rHl3D7qu5bwnKjyw1WWxBho8d6j42ernU4vY43NujSjC5u4fIW
+          daIAWkLDtz6qHUQVMlcVEKFd4aWj7XRfs3SwWT0xmR5qmxVulqlZIZpwP9NuS/sN6Tdk81y/cXo2
+          u9jPrsjs4ly2FApqQC1VVFcwf1swTARRzAQC7Jvgvt36jt14zz55cK8eX8GRJd01QcsgUmIQgQgg
+          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
+          Ne17mi4BqA65gvltfjQgAuboZ9od5D3vnb7j48vveXTp4XdMb9vFSyDMMe/QKYkMuJ/V0texOP11
+          hD5rQ5hwA9JNzF6enX/s6tc/e+XZL1175dz8WkM8oSZUwb5XPxkn+j7vuG13nzh68KH7Dr3zwb13
+          3dHu3qNNo732nXgWLscKFidGIlG2pjkQj39iUINmotxK33dXLq+/+LW1r35p/dnH52dfV+mpndbm
+          UwXztwDSHWSuXUt8ojn8num971+676HpqXdMThxu906IW24U2tG8J1HqFarUuxEJ901mQsMMQo9u
+          ju6SrL2w9eZzm2e+fP2lL629/NrWxZn2LfGEGv3ehvEIpPseopNdq3tOndj/jnt333Fq9cRt04OH
+          aTJFOwEaEREXh2tg5/YBeaPEyi24EYF00s+2ts6d3Tr96sbLX9944ZnN06/I5hqIqZ1Ub1zB/C2G
+          tAIdul61Ae/jXSfbw/dNT9zdHj85OXSsPXC43bu7WZpyM6V2iVuwbul8pltbmF/XzYv9tTf7y6/P
+          Lr48O/v81puvzS5cmK85goQJNeQ5MW/B76vL/UWk74mIp9Pl/ftXjh9bOX58+fDh6f6D7b79za7d
+          1E5pMqV26oJnmXV918t8Pl+7Pr9yeXbpwuz8uc03Xp2dfWN+5aLOZiAQN342s8K4gvnbhGp3QyCd
+          9go0YCZa5eWDvGeVpxNqJ9ROqQV0jm6m3Vy7TZlfluvX+o0eIqpOaqNJ68/b4stKfrtb+15ViYiY
+          aDKd7NrVrKxQO6GmpbYlbqTvteu076Tr+vX1/vo17TsVdfOYxE28VP2+VTB/R1Ht0KhQURW4SWqP
+          T7P9TA1RtrSxbTC8CNUBjSoSPxL3f2SoCYmdQKz5YCqGv1Fr60fwjVkBRQYxsYG6u0/5EN0JDZVi
+          7aRpio9l7P5aO00VzN872M7AW7+Zi7Bd7dtnXD+CatUqmKtVq1bBXK1atQrmatWqVTBXq1bBXK1a
+          tQrmatWqVTBXq1atgrlatQrmatWqVTBXq1atgrlatWoVzNWqVatgrlatgrlatWoVzNWqVatgrlat
+          WgVztWoVzNWqVatgrlatWgVztWrVKpirVatgrlatWgVztWrVKpirVatWwVytWrUK5mrVKpirVatW
+          wVytWrUK5mrVqlUwV6tWwVytWrUK5mrVqlUwV6tWrYK5WrUK5mrVqlUwV6tWrYK5WrVqFczVqlWr
+          YK5WrYK5WrVqFczVqlWrYK5WrVoFc7VqFczVqlWrYK5WrVoFc7Vq1SqYq1WrVsFcrVoFc7Vq1SqY
+          q1WrVsFcrVq1CuZq1SqYq1WrVsFcrVq1CuZq1apVMFerVsFcrVq1CuZq1apVMFerVq2CuVq1ahXM
+          1apVMFerVq2CuVq1ahXM1apVq2CuVq2CuVq1ahXM1apVq2CuVq1aBXO1ajvc/n+FxQMbcpP6BQAA
+          AABJRU5ErkJggg==
+          EOF
+          cp app/src/main/res/drawable-nodpi/ic_fg.png app/src/main/assets/logo.png
+
+          cat > app/src/main/res/values/colors.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <color name="ic_bg">#0F1835</color>
+          </resources>
+          EOF
+
+          cat > app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+              <background android:drawable="@color/ic_bg"/>
+              <foreground android:drawable="@drawable/ic_fg"/>
+          </adaptive-icon>
+          EOF
+
+          cp app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml
+
           cat > app/src/main/res/values/styles.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
           <resources>
               <style name="AppTheme" parent="android:style/Theme.Material.Light.NoActionBar">
                   <item name="android:fontFamily">sans</item>
-                  <item name="android:colorAccent">#6C63FF</item>
-                  <item name="android:navigationBarColor">#101426</item>
-                  <item name="android:statusBarColor">#101426</item>
+                  <item name="android:colorAccent">#4CC3FF</item>
+                  <item name="android:statusBarColor">#0F1835</item>
+                  <item name="android:navigationBarColor">#0F1835</item>
                   <item name="android:windowLightStatusBar">false</item>
-                  <item name="android:windowActionModeOverlay">true</item>
               </style>
           </resources>
           EOF
 
-          cat > app/src/main/java/com/example/sawti/PlaybackService.kt <<'EOF'
-          package com.example.sawti
+          cat > app/src/main/java/com/floatplayer/MainActivity.kt <<'EOF'
+          package com.floatplayer
 
-          import android.app.Notification
-          import android.app.NotificationChannel
-          import android.app.NotificationManager
-          import android.app.PendingIntent
-          import android.app.Service
-          import android.content.Intent
-          import android.media.AudioAttributes
-          import android.media.MediaPlayer
-          import android.net.Uri
-          import android.os.Build
-          import android.os.Handler
-          import android.os.IBinder
-          import android.os.Looper
-          import android.widget.Toast
-          import org.json.JSONArray
-          import java.io.IOException
-
-          class PlaybackService : Service() {
-              companion object {
-                  const val ACTION_ADD = "com.example.sawti.ADD"
-                  const val ACTION_PLAY_INDEX = "com.example.sawti.PLAY_INDEX"
-                  const val ACTION_TOGGLE = "com.example.sawti.TOGGLE"
-                  const val ACTION_STOP = "com.example.sawti.STOP"
-                  const val ACTION_NEXT = "com.example.sawti.NEXT"
-                  const val ACTION_PREVIOUS = "com.example.sawti.PREVIOUS"
-                  const val ACTION_SEEK = "com.example.sawti.SEEK"
-                  const val ACTION_SPEED = "com.example.sawti.SPEED"
-                  const val ACTION_REMOVE = "com.example.sawti.REMOVE"
-                  const val ACTION_MOVE = "com.example.sawti.MOVE"
-                  const val ACTION_REPLACE_LIST = "com.example.sawti.REPLACE_LIST"
-                  const val BROADCAST_STATE = "com.example.sawti.STATE"
-                  const val EXTRA_URI = "uri"
-                  const val EXTRA_INDEX = "index"
-                  const val EXTRA_POSITION = "position"
-                  const val EXTRA_SPEED = "speed"
-                  const val EXTRA_URIS = "uris"
-                  const val EXTRA_FROM = "from"
-                  const val EXTRA_TO = "to"
-                  private const val CHANNEL_ID = "sawti_playback"
-                  private const val NOTIFICATION_ID = 42
-              }
-
-              private var player: MediaPlayer? = null
-              private val playlist = ArrayList<String>()
-              private var currentIndex = -1
-              private var speed = 1.0f
-              private val handler = Handler(Looper.getMainLooper())
-              private val prefs by lazy { getSharedPreferences("sawti", MODE_PRIVATE) }
-              private val ticker = object : Runnable {
-                  override fun run() {
-                      broadcastState()
-                      if (player != null) handler.postDelayed(this, 500)
-                  }
-              }
-
-              override fun onCreate() {
-                  super.onCreate()
-                  createChannel()
-                  loadPlaylist()
-                  startForeground(NOTIFICATION_ID, notification())
-                  handler.post(ticker)
-              }
-
-              override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-                  when (intent?.action) {
-                      ACTION_ADD -> intent.getStringExtra(EXTRA_URI)?.let { addUri(it) }
-                      ACTION_PLAY_INDEX -> playIndex(intent.getIntExtra(EXTRA_INDEX, 0))
-                      ACTION_TOGGLE -> toggle()
-                      ACTION_STOP -> stopPlayback()
-                      ACTION_NEXT -> if (playlist.isNotEmpty()) playIndex((currentIndex + 1).mod(playlist.size))
-                      ACTION_PREVIOUS -> if (playlist.isNotEmpty()) playIndex(if (currentIndex <= 0) playlist.lastIndex else currentIndex - 1)
-                      ACTION_SEEK -> {
-                          val duration = player?.duration ?: 0
-                          val requested = intent.getIntExtra(EXTRA_POSITION, 0).coerceIn(0, duration)
-                          try { player?.seekTo(requested) } catch (_: IllegalStateException) { }
-                          broadcastState()
-                      }
-                      ACTION_SPEED -> {
-                          speed = intent.getFloatExtra(EXTRA_SPEED, 1.0f).coerceIn(0.5f, 2.0f)
-                          applySpeed()
-                          broadcastState()
-                      }
-                      ACTION_REMOVE -> removeAt(intent.getIntExtra(EXTRA_INDEX, -1))
-                      ACTION_MOVE -> moveItem(intent.getIntExtra(EXTRA_FROM, -1), intent.getIntExtra(EXTRA_TO, -1))
-                      ACTION_REPLACE_LIST -> {
-                          val values = intent.getStringArrayListExtra(EXTRA_URIS)
-                          if (values != null) { playlist.clear(); playlist.addAll(values); persistPlaylist(); broadcastState() }
-                      }
-                  }
-                  updateNotification()
-                  return START_STICKY
-              }
-
-              private fun loadPlaylist() {
-                  val json = prefs.getString("playlist", "[]") ?: "[]"
-                  try {
-                      val array = JSONArray(json)
-                      for (i in 0 until array.length()) playlist.add(array.getString(i))
-                  } catch (_: Exception) { playlist.clear() }
-                  currentIndex = prefs.getInt("index", -1).coerceIn(-1, maxOf(-1, playlist.lastIndex))
-                  speed = prefs.getFloat("speed", 1.0f).coerceIn(0.5f, 2.0f)
-              }
-
-              private fun persistPlaylist() {
-                  val array = JSONArray()
-                  playlist.forEach { array.put(it) }
-                  prefs.edit().putString("playlist", array.toString()).putInt("index", currentIndex).putFloat("speed", speed).apply()
-              }
-
-              private fun addUri(value: String) {
-                  if (!playlist.contains(value)) playlist.add(value)
-                  persistPlaylist()
-                  if (currentIndex < 0 && playlist.isNotEmpty()) playIndex(0) else broadcastState()
-              }
-
-              private fun removeAt(index: Int) {
-                  if (index !in playlist.indices) return
-                  val wasCurrent = index == currentIndex
-                  playlist.removeAt(index)
-                  if (playlist.isEmpty()) { currentIndex = -1; releasePlayer() }
-                  else if (index < currentIndex) currentIndex--
-                  else if (wasCurrent) { currentIndex = -1; playIndex(index.coerceAtMost(playlist.lastIndex)) }
-                  persistPlaylist(); broadcastState()
-              }
-
-              private fun moveItem(from: Int, to: Int) {
-                  if (from !in playlist.indices || to !in playlist.indices || from == to) return
-                  val item = playlist.removeAt(from)
-                  playlist.add(to, item)
-                  if (currentIndex == from) currentIndex = to
-                  else if (from < currentIndex && to >= currentIndex) currentIndex--
-                  else if (from > currentIndex && to <= currentIndex) currentIndex++
-                  persistPlaylist(); broadcastState()
-              }
-
-              private fun playIndex(index: Int) {
-                  if (index !in playlist.indices) return
-                  currentIndex = index
-                  releasePlayer()
-                  val next = MediaPlayer()
-                  player = next
-                  try {
-                      next.setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build())
-                      next.setDataSource(this, Uri.parse(playlist[index]))
-                      next.setOnPreparedListener { mp ->
-                          applySpeedTo(mp)
-                          mp.start()
-                          updateNotification()
-                          broadcastState()
-                      }
-                      next.setOnCompletionListener {
-                          if (playlist.isNotEmpty()) playIndex((currentIndex + 1).mod(playlist.size)) else stopPlayback()
-                      }
-                      next.setOnErrorListener { _, _, _ -> broadcastState(); true }
-                      next.prepareAsync()
-                      persistPlaylist(); broadcastState()
-                  } catch (e: IOException) {
-                      releasePlayer()
-                      Toast.makeText(this, "تعذّر فتح الملف الصوتي", Toast.LENGTH_SHORT).show()
-                      broadcastState()
-                  } catch (e: SecurityException) {
-                      releasePlayer(); broadcastState()
-                  } catch (e: IllegalArgumentException) {
-                      releasePlayer(); broadcastState()
-                  }
-              }
-
-              private fun toggle() {
-                  val mp = player
-                  if (mp == null) {
-                      if (playlist.isNotEmpty()) playIndex(currentIndex.coerceAtLeast(0))
-                      return
-                  }
-                  try {
-                      if (mp.isPlaying) mp.pause() else if (mp.duration > 0) mp.start()
-                      applySpeed()
-                  } catch (_: IllegalStateException) { }
-                  updateNotification(); broadcastState()
-              }
-
-              private fun stopPlayback() {
-                  try { player?.stop() } catch (_: Exception) { }
-                  releasePlayer()
-                  updateNotification(); broadcastState()
-              }
-
-              private fun releasePlayer() {
-                  try { player?.release() } catch (_: Exception) { }
-                  player = null
-              }
-
-              private fun applySpeed() {
-                  player?.let { applySpeedTo(it) }
-                  prefs.edit().putFloat("speed", speed).apply()
-              }
-
-              private fun applySpeedTo(mp: MediaPlayer) {
-                  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                      try { mp.playbackParams = mp.playbackParams.setSpeed(speed) } catch (_: Exception) { }
-                  }
-              }
-
-              private fun broadcastState() {
-                  val mp = player
-                  val intent = Intent(BROADCAST_STATE).setPackage(packageName)
-                      .putStringArrayListExtra(EXTRA_URIS, ArrayList(playlist))
-                      .putExtra(EXTRA_INDEX, currentIndex)
-                      .putExtra(EXTRA_POSITION, try { mp?.currentPosition ?: 0 } catch (_: Exception) { 0 })
-                      .putExtra("duration", try { mp?.duration ?: 0 } catch (_: Exception) { 0 })
-                      .putExtra("playing", try { mp?.isPlaying ?: false } catch (_: Exception) { false })
-                      .putExtra(EXTRA_SPEED, speed)
-                  sendBroadcast(intent)
-              }
-
-              private fun createChannel() {
-                  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                      val channel = NotificationChannel(CHANNEL_ID, "تشغيل الصوت", NotificationManager.IMPORTANCE_LOW)
-                      channel.description = "إشعار تشغيل الصوت في الخلفية"
-                      getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
-                  }
-              }
-
-              private fun notification(): Notification {
-                  val openIntent = PendingIntent.getActivity(this, 1, Intent(this, MainActivity::class.java), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-                  val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) Notification.Builder(this, CHANNEL_ID) else Notification.Builder(this)
-                  return builder.setSmallIcon(android.R.drawable.ic_media_play)
-                      .setContentTitle("صوتي - مشغّل الصوت")
-                      .setContentText(currentTitle())
-                      .setContentIntent(openIntent)
-                      .setOngoing(player != null)
-                      .addAction(Notification.Action.Builder(android.graphics.drawable.Icon.createWithResource(this, android.R.drawable.ic_media_previous), "السابق", servicePending(ACTION_PREVIOUS, 2)).build())
-                      .addAction(Notification.Action.Builder(android.graphics.drawable.Icon.createWithResource(this, if (isPlaying()) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play), if (isPlaying()) "إيقاف مؤقت" else "تشغيل", servicePending(ACTION_TOGGLE, 3)).build())
-                      .addAction(Notification.Action.Builder(android.graphics.drawable.Icon.createWithResource(this, android.R.drawable.ic_media_next), "التالي", servicePending(ACTION_NEXT, 4)).build())
-                      .build()
-              }
-
-              private fun servicePending(action: String, request: Int): PendingIntent {
-                  val intent = Intent(this, PlaybackService::class.java).setAction(action)
-                  return PendingIntent.getService(this, request, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-              }
-
-              private fun currentTitle(): String = if (currentIndex in playlist.indices) Uri.parse(playlist[currentIndex]).lastPathSegment ?: "ملف صوتي" else "اختر ملفًا صوتيًا"
-              private fun isPlaying(): Boolean = try { player?.isPlaying == true } catch (_: Exception) { false }
-              private fun updateNotification() {
-                  try { getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification()) } catch (_: Exception) { }
-              }
-
-              override fun onDestroy() {
-                  handler.removeCallbacks(ticker)
-                  releasePlayer()
-                  super.onDestroy()
-              }
-              override fun onBind(intent: Intent?): IBinder? = null
-          }
-          EOF
-
-          cat > app/src/main/java/com/example/sawti/FloatingWidgetService.kt <<'EOF'
-          package com.example.sawti
-
-          import android.app.Service
-          import android.content.Intent
-          import android.graphics.Color
-          import android.graphics.PixelFormat
-          import android.graphics.Typeface
-          import android.graphics.drawable.GradientDrawable
-          import android.os.Build
-          import android.os.IBinder
-          import android.view.Gravity
-          import android.view.MotionEvent
-          import android.view.View
-          import android.view.WindowManager
-          import android.widget.LinearLayout
-          import android.widget.TextView
-
-          class FloatingWidgetService : Service() {
-              private lateinit var wm: WindowManager
-              private var bubble: TextView? = null
-              private var panel: LinearLayout? = null
-              private var bubbleParams: WindowManager.LayoutParams? = null
-              private var panelParams: WindowManager.LayoutParams? = null
-              private var downX = 0f
-              private var downY = 0f
-              private var startX = 0
-              private var startY = 0
-              private var longPress = false
-              private val handler = android.os.Handler(android.os.Looper.getMainLooper())
-
-              override fun onCreate() {
-                  super.onCreate()
-                  wm = getSystemService(WINDOW_SERVICE) as WindowManager
-                  createBubble()
-              }
-
-              private fun overlayType(): Int = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY else WindowManager.LayoutParams.TYPE_PHONE
-              private fun params(width: Int, height: Int, gravity: Int = Gravity.TOP or Gravity.START) = WindowManager.LayoutParams(width, height, overlayType(), WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN, PixelFormat.TRANSLUCENT).apply { this.gravity = gravity; x = 24; y = 180 }
-
-              private fun createBubble() {
-                  val view = TextView(this).apply {
-                      text = "♫"
-                      textSize = 27f
-                      gravity = Gravity.CENTER
-                      setTextColor(Color.WHITE)
-                      typeface = Typeface.DEFAULT_BOLD
-                      background = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(Color.rgb(108,99,255), Color.rgb(0,188,212))).apply { shape = GradientDrawable.OVAL; setStroke(3, Color.WHITE) }
-                      elevation = 12f
-                  }
-                  val lp = params(62, 62)
-                  bubble = view; bubbleParams = lp
-                  view.setOnTouchListener { _, event ->
-                      when (event.action) {
-                          MotionEvent.ACTION_DOWN -> {
-                              downX = event.rawX; downY = event.rawY
-                              startX = lp.x; startY = lp.y; longPress = false
-                              handler.postDelayed({ longPress = true; showPanel() }, 550)
-                              true
-                          }
-                          MotionEvent.ACTION_MOVE -> {
-                              val dx = (event.rawX - downX).toInt(); val dy = (event.rawY - downY).toInt()
-                              if (kotlin.math.abs(dx) > 8 || kotlin.math.abs(dy) > 8) handler.removeCallbacksAndMessages(null)
-                              lp.x = (startX + dx).coerceAtLeast(0); lp.y = (startY + dy).coerceAtLeast(0)
-                              try { wm.updateViewLayout(view, lp) } catch (_: Exception) { }
-                              true
-                          }
-                          MotionEvent.ACTION_UP -> {
-                              handler.removeCallbacksAndMessages(null)
-                              if (!longPress && kotlin.math.abs(event.rawX - downX) < 12 && kotlin.math.abs(event.rawY - downY) < 12) command(PlaybackService.ACTION_TOGGLE)
-                              true
-                          }
-                          MotionEvent.ACTION_CANCEL -> { handler.removeCallbacksAndMessages(null); true }
-                          else -> true
-                      }
-                  }
-                  try { wm.addView(view, lp) } catch (_: Exception) { stopSelf() }
-              }
-
-              private fun showPanel() {
-                  if (panel != null) { hidePanel(); return }
-                  val box = LinearLayout(this).apply {
-                      orientation = LinearLayout.VERTICAL
-                      setPadding(14, 12, 14, 12)
-                      background = GradientDrawable().apply { setColor(Color.rgb(24, 29, 52)); cornerRadius = 24f; setStroke(2, Color.rgb(108,99,255)) }
-                      elevation = 16f
-                  }
-                  val title = TextView(this).apply { text = "مشغّل صوتي"; textSize = 16f; setTextColor(Color.WHITE); gravity = Gravity.CENTER; setPadding(8, 6, 8, 12) }
-                  box.addView(title)
-                  val row = LinearLayout(this).apply { gravity = Gravity.CENTER; orientation = LinearLayout.HORIZONTAL }
-                  addButton(row, "|◀") { command(PlaybackService.ACTION_PREVIOUS) }
-                  addButton(row, "▶ / ❚❚") { command(PlaybackService.ACTION_TOGGLE) }
-                  addButton(row, "▶|") { command(PlaybackService.ACTION_NEXT) }
-                  box.addView(row)
-                  val close = TextView(this).apply { text = "إخفاء اللوحة"; gravity = Gravity.CENTER; setTextColor(Color.LTGRAY); setPadding(8, 12, 8, 4); setOnClickListener { hidePanel() } }
-                  box.addView(close)
-                  val lp = params(WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT).apply { x = bubbleParams?.x ?: 24; y = (bubbleParams?.y ?: 180) + 72 }
-                  panel = box; panelParams = lp
-                  try { wm.addView(box, lp) } catch (_: Exception) { panel = null }
-              }
-
-              private fun addButton(row: LinearLayout, label: String, action: () -> Unit) {
-                  val b = TextView(this).apply {
-                      text = label; textSize = 16f; gravity = Gravity.CENTER; setTextColor(Color.WHITE); setPadding(12, 12, 12, 12)
-                      background = GradientDrawable().apply { setColor(Color.rgb(108,99,255)); cornerRadius = 16f }
-                      setOnClickListener { action() }
-                  }
-                  val lp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
-                  lp.setMargins(4, 2, 4, 2); row.addView(b, lp)
-              }
-
-              private fun command(action: String) {
-                  val intent = Intent(this, PlaybackService::class.java).setAction(action)
-                  if (Build.VERSION.SDK_INT >= 26) startForegroundService(intent) else startService(intent)
-              }
-              private fun hidePanel() { panel?.let { try { wm.removeView(it) } catch (_: Exception) { } }; panel = null; panelParams = null }
-              override fun onDestroy() { hidePanel(); bubble?.let { try { wm.removeView(it) } catch (_: Exception) { } }; bubble = null; super.onDestroy() }
-              override fun onBind(intent: Intent?): IBinder? = null
-          }
-          EOF
-
-          cat > app/src/main/java/com/example/sawti/CircularSeekView.kt <<'EOF'
-          package com.example.sawti
-
-          import android.content.Context
-          import android.graphics.Canvas
-          import android.graphics.Paint
-          import android.graphics.RectF
-          import android.view.MotionEvent
-          import android.view.View
-          import kotlin.math.atan2
-          import kotlin.math.min
-
-          class CircularSeekView(context: Context) : View(context) {
-              var durationMs: Int = 0
-                  private set
-              var positionMs: Int = 0
-                  private set
-              var onSeek: ((Int) -> Unit)? = null
-              var onSeekFinished: ((Int) -> Unit)? = null
-              private val track = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF444B78.toInt(); style = Paint.Style.STROKE; strokeWidth = 13f; strokeCap = Paint.Cap.ROUND }
-              private val progress = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF00D2BE.toInt(); style = Paint.Style.STROKE; strokeWidth = 13f; strokeCap = Paint.Cap.ROUND }
-              private val knob = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFFFFFFF.toInt(); style = Paint.Style.FILL }
-              private val timePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFFFFFFF.toInt(); textAlign = Paint.Align.CENTER; textSize = 20f; typeface = android.graphics.Typeface.DEFAULT_BOLD }
-              private val hintPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFB9BEDB.toInt(); textAlign = Paint.Align.CENTER; textSize = 12f }
-              private var dragging = false
-
-              fun setPlaybackPosition(position: Int, duration: Int) {
-                  durationMs = duration.coerceAtLeast(0)
-                  positionMs = position.coerceIn(0, durationMs)
-                  invalidate()
-              }
-
-              override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
-                  val desired = (190 * resources.displayMetrics.density).toInt()
-                  val w = resolveSize(desired, widthMeasureSpec)
-                  val h = resolveSize(desired, heightMeasureSpec)
-                  val size = min(w, h)
-                  setMeasuredDimension(size, size)
-              }
-
-              override fun onDraw(canvas: Canvas) {
-                  super.onDraw(canvas)
-                  val cx = width / 2f; val cy = height / 2f
-                  val radius = min(width, height) * 0.39f
-                  val rect = RectF(cx - radius, cy - radius, cx + radius, cy + radius)
-                  canvas.drawArc(rect, -90f, 360f, false, track)
-                  val sweep = if (durationMs > 0) 360f * positionMs / durationMs else 0f
-                  canvas.drawArc(rect, -90f, sweep, false, progress)
-                  val angle = Math.toRadians((sweep - 90f).toDouble())
-                  canvas.drawCircle(cx + radius * kotlin.math.cos(angle).toFloat(), cy + radius * kotlin.math.sin(angle).toFloat(), 8f, knob)
-                  canvas.drawText(format(positionMs), cx, cy - 2f, timePaint)
-                  canvas.drawText("من ${format(durationMs)}", cx, cy + 23f, hintPaint)
-              }
-
-              override fun onTouchEvent(event: MotionEvent): Boolean {
-                  when (event.action) {
-                      MotionEvent.ACTION_DOWN -> { dragging = true; parent?.requestDisallowInterceptTouchEvent(true); updateFromTouch(event.x, event.y); return true }
-                      MotionEvent.ACTION_MOVE -> { if (dragging) updateFromTouch(event.x, event.y); return true }
-                      MotionEvent.ACTION_UP -> { if (dragging) updateFromTouch(event.x, event.y); dragging = false; onSeekFinished?.invoke(positionMs); performClick(); return true }
-                      MotionEvent.ACTION_CANCEL -> { dragging = false; return true }
-                  }
-                  return true
-              }
-
-              override fun performClick(): Boolean { super.performClick(); return true }
-
-              private fun updateFromTouch(x: Float, y: Float) {
-                  if (durationMs <= 0) return
-                  val dx = x - width / 2f; val dy = y - height / 2f
-                  var degrees = Math.toDegrees(atan2(dy.toDouble(), dx.toDouble())).toFloat() + 90f
-                  if (degrees < 0f) degrees += 360f
-                  positionMs = (durationMs * (degrees / 360f)).toInt().coerceIn(0, durationMs)
-                  invalidate()
-                  onSeek?.invoke(positionMs)
-              }
-
-              private fun format(ms: Int): String {
-                  val seconds = ms.coerceAtLeast(0) / 1000
-                  return String.format(java.util.Locale.US, "%02d:%02d", seconds / 60, seconds % 60)
-              }
-          }
-          EOF
-
-          cat > app/src/main/java/com/example/sawti/MainActivity.kt <<'EOF'
-          package com.example.sawti
-
-          import android.Manifest
           import android.app.Activity
-          import android.app.AlertDialog
-          import android.content.BroadcastReceiver
-          import android.content.Context
           import android.content.Intent
-          import android.content.IntentFilter
-          import android.content.pm.PackageManager
           import android.graphics.Color
-          import android.graphics.Typeface
-          import android.graphics.drawable.GradientDrawable
           import android.net.Uri
           import android.os.Build
           import android.os.Bundle
           import android.provider.OpenableColumns
           import android.provider.Settings
-          import android.view.Gravity
-          import android.view.View
-          import android.view.ViewGroup
-          import android.widget.*
+          import android.webkit.JavascriptInterface
+          import android.webkit.WebChromeClient
+          import android.webkit.WebView
+          import android.widget.Toast
+          import org.json.JSONArray
+          import org.json.JSONObject
 
           class MainActivity : Activity() {
-              private val uris = ArrayList<String>()
-              private val names = ArrayList<String>()
-              private lateinit var listBox: LinearLayout
-              private lateinit var titleView: TextView
-              private lateinit var stateView: TextView
-              private lateinit var timeView: TextView
-              private lateinit var circularSeek: CircularSeekView
-              private lateinit var playButton: TextView
-              private lateinit var speedButton: TextView
-              private var currentIndex = -1
-              private var duration = 0
-              private var currentPosition = 0
-              private var playing = false
-              private var speed = 1f
-              private var userSeeking = false
-              private var receiverRegistered = false
+              private lateinit var web: WebView
 
-              private val stateReceiver = object : BroadcastReceiver() {
-                  override fun onReceive(context: Context?, intent: Intent?) {
-                      if (intent?.action != PlaybackService.BROADCAST_STATE) return
-                      val incoming = intent.getStringArrayListExtra(PlaybackService.EXTRA_URIS) ?: arrayListOf()
-                      if (incoming != uris) {
-                          uris.clear(); uris.addAll(incoming)
-                          names.clear(); uris.forEach { names.add(displayName(Uri.parse(it))) }
-                          renderPlaylist()
+              override fun onCreate(b: Bundle?) {
+                  super.onCreate(b)
+                  window.statusBarColor = Color.rgb(15, 24, 53)
+                  window.navigationBarColor = Color.rgb(15, 24, 53)
+                  web = WebView(this)
+                  web.settings.javaScriptEnabled = true
+                  web.settings.domStorageEnabled = true
+                  web.webChromeClient = WebChromeClient()
+                  web.setBackgroundColor(Color.rgb(15, 24, 53))
+                  web.addJavascriptInterface(Bridge(), "Android")
+                  setContentView(web)
+                  web.loadUrl("file:///android_asset/index.html")
+                  if (intent?.getBooleanExtra("pickForQueue", false) == true) {
+                      intent.removeExtra("pickForQueue")
+                      web.post { openPicker(8) }
+                  }
+                  if (Build.VERSION.SDK_INT >= 33) {
+                      requestPermissions(arrayOf("android.permission.POST_NOTIFICATIONS"), 1)
+                  }
+              }
+
+              override fun onNewIntent(intent: Intent?) {
+                  super.onNewIntent(intent)
+                  setIntent(intent)
+                  if (intent?.getBooleanExtra("pickForQueue", false) == true) {
+                      intent.removeExtra("pickForQueue")
+                      web.post { openPicker(8) }
+                  }
+              }
+
+              private fun openPicker(requestCode: Int) {
+                  val i = Intent(Intent.ACTION_OPEN_DOCUMENT)
+                  i.addCategory(Intent.CATEGORY_OPENABLE)
+                  i.type = "audio/*"
+                  i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+                  i.addFlags(
+                      Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                      Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+                  )
+                  startActivityForResult(i, requestCode)
+              }
+
+              override fun onBackPressed() {
+                  web.evaluateJavascript("goBack()") {
+                      if (it == "true") finish()
+                  }
+              }
+
+              private fun nameOf(u: Uri): String {
+                  var n = "صوتية"
+                  try {
+                      contentResolver.query(u, null, null, null, null)?.use { c ->
+                          if (c.moveToFirst()) {
+                              val i = c.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                              if (i >= 0) n = c.getString(i)
+                          }
                       }
-                      val previousIndex = currentIndex
-                      currentIndex = intent.getIntExtra(PlaybackService.EXTRA_INDEX, -1)
-                      if (previousIndex != currentIndex) renderPlaylist()
-                      currentPosition = intent.getIntExtra(PlaybackService.EXTRA_POSITION, 0)
-                      duration = intent.getIntExtra("duration", 0)
-                      playing = intent.getBooleanExtra("playing", false)
-                      speed = intent.getFloatExtra(PlaybackService.EXTRA_SPEED, 1f)
-                      updatePlayerUi()
-                  }
+                  } catch (_: Exception) {}
+                  return n.substringBeforeLast('.')
               }
 
-              override fun onCreate(savedInstanceState: Bundle?) {
-                  super.onCreate(savedInstanceState)
-                  window.statusBarColor = Color.rgb(16, 20, 38)
-                  window.navigationBarColor = Color.rgb(16, 20, 38)
-                  buildUi()
-                  registerStateReceiver()
-                  startPlaybackService()
-                  requestNotificationPermission()
-              }
-
-              private fun buildUi() {
-                  val root = LinearLayout(this).apply {
-                      orientation = LinearLayout.VERTICAL
-                      setPadding(20, 18, 20, 18)
-                      layoutDirection = View.LAYOUT_DIRECTION_RTL
-                      background = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(Color.rgb(16,20,38), Color.rgb(34,39,75), Color.rgb(20,25,48)))
-                  }
-                  val top = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-                  val heading = TextView(this).apply { text = "صوتي"; textSize = 27f; setTextColor(Color.WHITE); typeface = Typeface.DEFAULT_BOLD }
-                  top.addView(heading, LinearLayout.LayoutParams(0, -2, 1f))
-                  speedButton = button("السرعة 1.0×", 14).apply { setOnClickListener { showSpeedMenu(it) } }
-                  top.addView(speedButton)
-                  root.addView(top)
-                  root.addView(label("مشغّل صوتك، في كل مكان", 14, Color.LTGRAY).apply { setPadding(0, 3, 0, 16) })
-
-                  val card = LinearLayout(this).apply {
-                      orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; setPadding(18, 22, 18, 20)
-                      background = GradientDrawable().apply { setColor(Color.argb(220, 34, 41, 76)); cornerRadius = 28f; setStroke(1, Color.rgb(94, 101, 170)) }
-                  }
-                  titleView = label("لم تختر ملفًا صوتيًا بعد", 19, Color.WHITE).apply { typeface = Typeface.DEFAULT_BOLD; gravity = Gravity.CENTER; maxLines = 2 }
-                  card.addView(titleView, LinearLayout.LayoutParams(-1, -2))
-                  stateView = label("جاهز للتشغيل", 13, Color.LTGRAY).apply { gravity = Gravity.CENTER; setPadding(0, 8, 0, 14) }
-                  card.addView(stateView)
-                  circularSeek = CircularSeekView(this).apply {
-                      onSeek = { requestedPosition ->
-                          userSeeking = true
-                          timeView.text = "${formatTime(requestedPosition)} / ${formatTime(duration)}"
+              @Deprecated("Deprecated in Android")
+              override fun onActivityResult(rc: Int, res: Int, d: Intent?) {
+                  super.onActivityResult(rc, res, d)
+                  if ((rc == 7 || rc == 8) && res == RESULT_OK && d != null) {
+                      val uris = ArrayList<Uri>()
+                      val cd = d.clipData
+                      if (cd != null) {
+                          for (i in 0 until cd.itemCount) uris.add(cd.getItemAt(i).uri)
+                      } else if (d.data != null) uris.add(d.data!!)
+                      val arr = JSONArray()
+                      for (u in uris) {
+                          try {
+                              contentResolver.takePersistableUriPermission(
+                                  u, Intent.FLAG_GRANT_READ_URI_PERMISSION
+                              )
+                          } catch (_: Exception) {}
+                          arr.put(JSONObject().put("uri", u.toString()).put("name", nameOf(u)))
                       }
-                      onSeekFinished = { requestedPosition ->
-                          userSeeking = false
-                          if (duration > 0) command(PlaybackService.ACTION_SEEK) { putExtra(PlaybackService.EXTRA_POSITION, requestedPosition) }
-                      }
-                  }
-                  card.addView(circularSeek, LinearLayout.LayoutParams(190.dp(), 190.dp()).apply { gravity = Gravity.CENTER })
-                  timeView = label("00:00 / 00:00", 12, Color.LTGRAY).apply { gravity = Gravity.CENTER; setPadding(0, 2, 0, 12) }
-                  card.addView(timeView)
-                  val controls = LinearLayout(this).apply { gravity = Gravity.CENTER; orientation = LinearLayout.HORIZONTAL }
-                  controls.addView(button("السابق", 13).apply { setOnClickListener { command(PlaybackService.ACTION_PREVIOUS) } })
-                  playButton = button("▶ تشغيل", 16).apply { setOnClickListener { command(PlaybackService.ACTION_TOGGLE) } }
-                  controls.addView(playButton, LinearLayout.LayoutParams(0, 52, 1f))
-                  controls.addView(button("التالي", 13).apply { setOnClickListener { command(PlaybackService.ACTION_NEXT) } })
-                  card.addView(controls)
-                  val secondary = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER; setPadding(0, 14, 0, 0) }
-                  secondary.addView(button("إيقاف نهائي", 12).apply { setOnClickListener { command(PlaybackService.ACTION_STOP) } })
-                  secondary.addView(button("الفقاعة العائمة", 12).apply { setOnClickListener { enableFloating() } })
-                  card.addView(secondary)
-                  root.addView(card)
-
-                  val listHeader = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(0, 20, 0, 10) }
-                  listHeader.addView(label("قائمة التشغيل", 20, Color.WHITE).apply { typeface = Typeface.DEFAULT_BOLD }, LinearLayout.LayoutParams(0, -2, 1f))
-                  listHeader.addView(button("＋ إضافة ملفات", 13).apply { setOnClickListener { chooseAudio() } })
-                  root.addView(listHeader)
-                  val scroll = ScrollView(this)
-                  listBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-                  scroll.addView(listBox)
-                  root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
-                  setContentView(root)
-                  renderPlaylist()
-              }
-
-              private fun label(text: String, size: Int, color: Int) = TextView(this).apply { this.text = text; textSize = size.toFloat(); setTextColor(color) }
-              private fun button(text: String, size: Int) = TextView(this).apply {
-                  this.text = text; textSize = size.toFloat(); setTextColor(Color.WHITE); gravity = Gravity.CENTER; setPadding(13, 10, 13, 10)
-                  background = GradientDrawable().apply { setColor(if (text.contains("تشغيل") || text.contains("إضافة")) Color.rgb(108,99,255) else Color.rgb(53,61,105)); cornerRadius = 17f }
-                  val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT); lp.setMargins(4, 3, 4, 3); layoutParams = lp
-              }
-
-              private fun chooseAudio() {
-                  val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-                      addCategory(Intent.CATEGORY_OPENABLE); type = "audio/*"; putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
-                  }
-                  startActivityForResult(intent, 100)
-              }
-
-              @Deprecated("Deprecated by Android API; retained for broad device compatibility")
-              override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-                  super.onActivityResult(requestCode, resultCode, data)
-                  if (requestCode != 100 || resultCode != RESULT_OK || data == null) return
-                  val selected = ArrayList<Uri>()
-                  data.clipData?.let { clip -> for (i in 0 until clip.itemCount) selected.add(clip.getItemAt(i).uri) }
-                      ?: data.data?.let { selected.add(it) }
-                  selected.forEach { uri ->
-                      try { contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) { }
-                      if (!uris.contains(uri.toString())) {
-                          uris.add(uri.toString()); names.add(displayName(uri))
-                          command(PlaybackService.ACTION_ADD) { putExtra(PlaybackService.EXTRA_URI, uri.toString()) }
+                      if (rc == 8) {
+                          PlayerService.inst?.appendTracks(arr)
+                      } else {
+                          web.evaluateJavascript("onPicked(" + arr.toString() + ")", null)
                       }
                   }
-                  renderPlaylist()
               }
 
-              private fun displayName(uri: Uri): String {
-                  var result = uri.lastPathSegment ?: "ملف صوتي"
-                  try { contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { if (it.moveToFirst()) result = it.getString(0) ?: result } } catch (_: Exception) { }
-                  return result.substringAfterLast('/')
-              }
-
-              private fun renderPlaylist() {
-                  if (!::listBox.isInitialized) return
-                  listBox.removeAllViews()
-                  if (uris.isEmpty()) {
-                      listBox.addView(label("أضف ملفات صوتية من جهازك لتظهر هنا.", 14, Color.LTGRAY).apply { gravity = Gravity.CENTER; setPadding(8, 28, 8, 28) })
-                      return
+              inner class Bridge {
+                  @JavascriptInterface
+                  fun pick() {
+                      runOnUiThread { openPicker(7) }
                   }
-                  uris.forEachIndexed { index, uri ->
-                      val row = LinearLayout(this).apply {
-                          orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(10, 8, 10, 8)
-                          background = GradientDrawable().apply { setColor(if (index == currentIndex) Color.rgb(58,62,111) else Color.argb(180,35,41,72)); cornerRadius = 18f }
+
+                  @JavascriptInterface
+                  fun play(q: String, i: Int, p: Int) {
+                      runOnUiThread {
+                          if (!Settings.canDrawOverlays(this@MainActivity)) {
+                              Toast.makeText(
+                                  this@MainActivity,
+                                  "فعّل العرض فوق التطبيقات الأخرى ثم اضغط تشغيل مجددًا",
+                                  Toast.LENGTH_LONG
+                              ).show()
+                              startActivity(
+                                  Intent(
+                                      Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                      Uri.parse("package:" + packageName)
+                                  )
+                              )
+                          } else {
+                              val s = Intent(this@MainActivity, PlayerService::class.java)
+                              s.putExtra("queue", q)
+                              s.putExtra("idx", i)
+                              s.putExtra("pos", p)
+                              if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                  startForegroundService(s)
+                              } else {
+                                  startService(s)
+                              }
+                          }
                       }
-                      val info = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(4, 2, 4, 2) }
-                      info.addView(label(if (index == currentIndex) "♫  ${names.getOrNull(index) ?: "ملف صوتي"}" else (names.getOrNull(index) ?: "ملف صوتي"), 14, Color.WHITE).apply { maxLines = 2 })
-                      info.addView(label(if (index == currentIndex) "المسار الحالي" else "اضغط للتشغيل", 11, Color.LTGRAY))
-                      info.setOnClickListener { command(PlaybackService.ACTION_PLAY_INDEX) { putExtra(PlaybackService.EXTRA_INDEX, index) } }
-                      row.addView(info, LinearLayout.LayoutParams(0, -2, 1f))
-                      row.addView(smallButton("↑") { if (index > 0) command(PlaybackService.ACTION_MOVE) { putExtra(PlaybackService.EXTRA_FROM, index); putExtra(PlaybackService.EXTRA_TO, index - 1) } })
-                      row.addView(smallButton("↓") { if (index < uris.lastIndex) command(PlaybackService.ACTION_MOVE) { putExtra(PlaybackService.EXTRA_FROM, index); putExtra(PlaybackService.EXTRA_TO, index + 1) } })
-                      row.addView(smallButton("×") { command(PlaybackService.ACTION_REMOVE) { putExtra(PlaybackService.EXTRA_INDEX, index) } })
-                      val lp = LinearLayout.LayoutParams(-1, -2); lp.setMargins(0, 4, 0, 4); listBox.addView(row, lp)
                   }
-              }
 
-              private fun smallButton(text: String, action: () -> Unit) = TextView(this).apply {
-                  this.text = text; textSize = 18f; gravity = Gravity.CENTER; setTextColor(Color.WHITE); setPadding(9, 7, 9, 7)
-                  background = GradientDrawable().apply { setColor(Color.rgb(75,82,135)); cornerRadius = 12f }
-                  setOnClickListener { action() }
-              }
-
-              private fun showSpeedMenu(anchor: View) {
-                  val speeds = arrayOf("0.5×", "0.75×", "1.0×", "1.25×", "1.5×", "1.75×", "2.0×")
-                  val values = floatArrayOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f)
-                  AlertDialog.Builder(this).setTitle("سرعة التشغيل").setItems(speeds) { _, which ->
-                      speed = values[which]
-                      command(PlaybackService.ACTION_SPEED) { putExtra(PlaybackService.EXTRA_SPEED, speed) }
-                      speedButton.text = "السرعة ${speed}×"
-                  }.setNegativeButton("إلغاء", null).show()
-              }
-
-              private fun enableFloating() {
-                  if (!Settings.canDrawOverlays(this)) {
-                      startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
-                      Toast.makeText(this, "فعّل السماح بالظهور فوق التطبيقات ثم ارجع واضغط الزر مرة أخرى", Toast.LENGTH_LONG).show()
-                      return
-                  }
-                  try { startService(Intent(this, FloatingWidgetService::class.java)); Toast.makeText(this, "تم تشغيل الفقاعة العائمة", Toast.LENGTH_SHORT).show() }
-                  catch (_: Exception) { Toast.makeText(this, "تعذّر تشغيل الفقاعة", Toast.LENGTH_SHORT).show() }
-              }
-
-              private fun command(action: String, extras: Intent.() -> Unit = {}) {
-                  val intent = Intent(this, PlaybackService::class.java).setAction(action)
-                  try { extras(intent) } catch (_: Exception) { }
-                  startPlaybackService(intent)
-              }
-
-              private fun startPlaybackService(intent: Intent = Intent(this, PlaybackService::class.java)) {
-                  try { if (Build.VERSION.SDK_INT >= 26) startForegroundService(intent) else startService(intent) }
-                  catch (_: Exception) { Toast.makeText(this, "تعذّر بدء خدمة الصوت", Toast.LENGTH_SHORT).show() }
-              }
-
-              private fun registerStateReceiver() {
-                  val filter = IntentFilter(PlaybackService.BROADCAST_STATE)
-                  if (Build.VERSION.SDK_INT >= 33) registerReceiver(stateReceiver, filter, RECEIVER_NOT_EXPORTED) else registerReceiver(stateReceiver, filter)
-                  receiverRegistered = true
-              }
-
-              private fun updatePlayerUi() {
-                  if (!::titleView.isInitialized) return
-                  titleView.text = names.getOrNull(currentIndex) ?: "لم تختر ملفًا صوتيًا بعد"
-                  stateView.text = when { playing -> "قيد التشغيل"; currentIndex >= 0 -> "متوقف مؤقتًا أو جاهز"; else -> "جاهز للتشغيل" }
-                  playButton.text = if (playing) "❚❚ إيقاف مؤقت" else "▶ تشغيل"
-                  speedButton.text = "السرعة ${speed}×"
-                  if (!userSeeking) circularSeek.setPlaybackPosition(currentPosition, duration)
-                  timeView.text = "${formatTime(currentPosition)} / ${formatTime(duration)}"
-              }
-
-              private fun Int.dp(): Int = (this * resources.displayMetrics.density).toInt()
-
-              private fun formatTime(ms: Int): String {
-                  val seconds = (ms.coerceAtLeast(0) / 1000)
-                  return String.format(java.util.Locale.US, "%02d:%02d", seconds / 60, seconds % 60)
-              }
-
-              private fun requestNotificationPermission() {
-                  if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 501)
-              }
-
-              override fun onDestroy() {
-                  if (receiverRegistered) try { unregisterReceiver(stateReceiver) } catch (_: Exception) { }
-                  super.onDestroy()
+                  @JavascriptInterface
+                  fun state(): String = PlayerService.inst?.stateJson() ?: "{}"
               }
           }
           EOF
 
-      - name: Validate generated project files
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -s app/src/main/AndroidManifest.xml
-          test -s app/src/main/java/com/example/sawti/MainActivity.kt
-          test -s app/src/main/java/com/example/sawti/PlaybackService.kt
-          test -s app/src/main/java/com/example/sawti/FloatingWidgetService.kt
-          echo "Project source files generated. Starting Gradle build."
+          cat > app/src/main/java/com/floatplayer/PlayerService.kt <<'EOF'
+          package com.floatplayer
+
+          import android.app.Notification
+          import android.app.NotificationChannel
+          import android.app.NotificationManager
+          import android.app.Service
+          import android.content.Context
+          import android.content.Intent
+          import android.content.res.ColorStateList
+          import android.graphics.Canvas
+          import android.graphics.Color
+          import android.graphics.LinearGradient
+          import android.graphics.Paint
+          import android.graphics.Path
+          import android.graphics.PixelFormat
+          import android.graphics.RectF
+          import android.graphics.Shader
+          import android.graphics.SweepGradient
+          import android.graphics.Typeface
+          import android.graphics.drawable.GradientDrawable
+          import android.media.MediaPlayer
+          import android.net.Uri
+          import android.os.Handler
+          import android.os.IBinder
+          import android.os.Looper
+          import android.view.Gravity
+          import android.view.MotionEvent
+          import android.view.View
+          import android.view.ViewGroup
+          import android.view.WindowManager
+          import android.widget.Button
+          import android.widget.LinearLayout
+          import android.widget.ScrollView
+          import android.widget.SeekBar
+          import android.widget.TextView
+          import android.widget.Toast
+          import java.util.Locale
+          import org.json.JSONArray
+          import org.json.JSONObject
+
+          fun fmt(ms: Int): String {
+              val s = ms.coerceAtLeast(0) / 1000
+              return "%d:%02d".format(s / 60, s % 60)
+          }
+
+          class PlayerService : Service() {
+              companion object { var inst: PlayerService? = null }
+
+              lateinit var wm: WindowManager
+              private var mp: MediaPlayer? = null
+              private var ready = false
+              private var playbackSpeed = 1.0f
+              private var speedPanel: View? = null
+              private val prefs by lazy { getSharedPreferences("fp", Context.MODE_PRIVATE) }
+              private var queue = JSONArray()
+              private var idx = 0
+              var curUri = ""
+              var curName = ""
+              var markA = -1
+              var markB = -1
+              var loopA = -1
+              var loopB = -1
+              private var bubble: BubbleView? = null
+              private var playlistPanel: View? = null
+              private val h = Handler(Looper.getMainLooper())
+
+              private val tick = object : Runnable {
+                  override fun run() {
+                      try {
+                          val m = mp
+                          if (ready && m != null && m.isPlaying &&
+                              loopA >= 0 && loopB > loopA &&
+                              m.currentPosition >= loopB) {
+                              m.seekTo(loopA)
+                          }
+                          bubble?.invalidate()
+                      } catch (_: Exception) {}
+                      h.postDelayed(this, 100)
+                  }
+              }
+
+              override fun onBind(intent: Intent?): IBinder? = null
+
+              override fun onCreate() {
+                  super.onCreate()
+                  inst = this
+                  wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+                  val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                  nm.createNotificationChannel(
+                      NotificationChannel("pl", "المشغّل", NotificationManager.IMPORTANCE_LOW)
+                  )
+                  playbackSpeed = prefs.getFloat("speed", 1.0f)
+                  h.post(tick)
+              }
+
+              override fun onDestroy() {
+                  hideSpeedPanel()
+                  h.removeCallbacksAndMessages(null)
+                  try { mp?.release() } catch (_: Exception) {}
+                  mp = null
+                  inst = null
+                  super.onDestroy()
+              }
+
+              private fun notif(title: String): Notification =
+                  Notification.Builder(this, "pl")
+                      .setSmallIcon(android.R.drawable.ic_media_play)
+                      .setContentTitle(title)
+                      .setContentText("المشغّل العائم يعمل")
+                      .setOngoing(true)
+                      .build()
+
+              override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+                  startForeground(1, notif(if (curName.isEmpty()) "المشغّل" else curName))
+                  if (intent != null && intent.hasExtra("queue")) {
+                      queue = JSONArray(intent.getStringExtra("queue"))
+                      playAt(intent.getIntExtra("idx", 0), intent.getIntExtra("pos", 0))
+                  }
+                  return START_NOT_STICKY
+              }
+
+              private fun playAt(i: Int, startPos: Int) {
+                  if (i < 0 || i >= queue.length()) return
+                  val item = queue.getJSONObject(i)
+                  idx = i
+                  curUri = item.getString("uri")
+                  curName = item.getString("name")
+                  cancelAB(false)
+                  ready = false
+                  try { mp?.release() } catch (_: Exception) {}
+                  val player = MediaPlayer()
+                  mp = player
+                  try {
+                      player.setDataSource(this, Uri.parse(curUri))
+                      player.setOnPreparedListener {
+                          ready = true
+                          try { it.playbackParams = it.playbackParams.setSpeed(playbackSpeed) } catch (_: Exception) {}
+                          if (startPos > 0) it.seekTo(startPos.coerceAtMost(it.duration))
+                          it.start()
+                          bubble?.invalidate()
+                      }
+                      player.setOnCompletionListener {
+                          if (idx + 1 < queue.length()) playAt(idx + 1, 0)
+                      }
+                      player.setOnErrorListener { _, _, _ ->
+                          ready = false
+                          true
+                      }
+                      player.prepareAsync()
+                  } catch (_: Exception) {
+                      ready = false
+                      Toast.makeText(this, "تعذّر تشغيل الملف", Toast.LENGTH_SHORT).show()
+                  }
+                  val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                  nm.notify(1, notif(curName))
+                  ensureBubble()
+                  refreshPlaylistPanel()
+              }
+
+              fun playbackSpeedLabel(): String {
+                  val s = "%.2f".format(Locale.US, playbackSpeed).trimEnd('0')
+                  return (if (s.endsWith(".")) s + "0" else s) + "×"
+              }
+
+              fun setSpeed(v: Float) {
+                  val s = (Math.round(v * 20) / 20f).coerceIn(0.5f, 3.0f)
+                  playbackSpeed = s
+                  prefs.edit().putFloat("speed", s).apply()
+                  val m = mp
+                  if (ready && m != null) {
+                      try {
+                          val was = m.isPlaying
+                          m.playbackParams = m.playbackParams.setSpeed(s)
+                          if (!was && m.isPlaying) m.pause()
+                      } catch (_: Exception) {
+                          Toast.makeText(this, "تعذّر تغيير السرعة لهذا الملف", Toast.LENGTH_SHORT).show()
+                      }
+                  }
+                  bubble?.invalidate()
+              }
+
+              fun hideSpeedPanel() {
+                  speedPanel?.let { try { wm.removeView(it) } catch (_: Exception) {} }
+                  speedPanel = null
+              }
+
+              fun showSpeedPicker() {
+                  if (speedPanel != null) { hideSpeedPanel(); return }
+                  hidePlaylistPanel()
+                  val root = LinearLayout(this).apply {
+                      orientation = LinearLayout.VERTICAL
+                      setPadding(dp(14), dp(12), dp(14), dp(12))
+                      background = GradientDrawable().apply {
+                          setColor(Color.argb(246, 15, 24, 53))
+                          cornerRadius = dp(22).toFloat()
+                          setStroke(dp(1), Color.argb(70, 120, 190, 255))
+                      }
+                  }
+                  val value = TextView(this).apply {
+                      textSize = 28f
+                      typeface = Typeface.DEFAULT_BOLD
+                      gravity = Gravity.CENTER
+                      setTextColor(Color.rgb(92, 200, 255))
+                  }
+                  val seek = SeekBar(this).apply {
+                      max = 50
+                      progressTintList = ColorStateList.valueOf(Color.rgb(76, 195, 255))
+                      thumbTintList = ColorStateList.valueOf(Color.WHITE)
+                      progressBackgroundTintList = ColorStateList.valueOf(Color.rgb(70, 86, 140))
+                  }
+                  val chips = ArrayList<Pair<Float, Button>>()
+
+                  fun sync() {
+                      value.text = playbackSpeedLabel()
+                      seek.progress = Math.round((playbackSpeed - 0.5f) / 0.05f)
+                      chips.forEach { (v, b) ->
+                          val on = Math.abs(v - playbackSpeed) < 0.001f
+                          (b.background as GradientDrawable)
+                              .setColor(Color.parseColor(if (on) "#3D8BFF" else "#2A3A78"))
+                      }
+                  }
+
+                  // السطر العلوي: − القيمة +
+                  val top = LinearLayout(this).apply {
+                      orientation = LinearLayout.HORIZONTAL
+                      gravity = Gravity.CENTER_VERTICAL
+                  }
+                  top.addView(panelButton("−", "#2A3A78") { setSpeed(playbackSpeed - 0.05f); sync() },
+                      LinearLayout.LayoutParams(dp(48), dp(44)))
+                  top.addView(value, LinearLayout.LayoutParams(0, dp(44), 1f))
+                  top.addView(panelButton("+", "#2A3A78") { setSpeed(playbackSpeed + 0.05f); sync() },
+                      LinearLayout.LayoutParams(dp(48), dp(44)))
+                  root.addView(top, LinearLayout.LayoutParams(-1, dp(44)))
+
+                  seek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                      override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
+                          if (fromUser) { setSpeed(0.5f + p * 0.05f); sync() }
+                      }
+                      override fun onStartTrackingTouch(s: SeekBar?) {}
+                      override fun onStopTrackingTouch(s: SeekBar?) {}
+                  })
+                  root.addView(seek, LinearLayout.LayoutParams(-1, dp(40)).apply {
+                      topMargin = dp(6); bottomMargin = dp(6)
+                  })
+
+                  // الأزرار الجاهزة
+                  val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+                  for (v in floatArrayOf(0.75f, 1.0f, 1.25f, 1.5f, 2.0f)) {
+                      val label = if (v == v.toInt().toFloat()) "${v}×" else "$v×"
+                      val b = panelButton(label, "#2A3A78") { setSpeed(v); sync() }
+                      chips.add(v to b)
+                      row.addView(b, LinearLayout.LayoutParams(0, dp(40), 1f).apply { marginEnd = dp(3) })
+                  }
+                  root.addView(row, LinearLayout.LayoutParams(-1, dp(40)))
+
+                  // إعادة وإغلاق
+                  val bottom = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+                  bottom.addView(panelButton("إعادة 1.0×", "#2F8CF0") { setSpeed(1.0f); sync() },
+                      LinearLayout.LayoutParams(0, dp(42), 1f).apply { marginEnd = dp(6) })
+                  bottom.addView(panelButton("إغلاق", "#2A3566") { hideSpeedPanel() },
+                      LinearLayout.LayoutParams(0, dp(42), 1f))
+                  root.addView(bottom, LinearLayout.LayoutParams(-1, dp(42)).apply { topMargin = dp(8) })
+
+                  sync()
+                  speedPanel = root
+
+                  val bp = bubble?.lp
+                  val screenW = resources.displayMetrics.widthPixels
+                  val screenH = resources.displayMetrics.heightPixels
+                  val params = WindowManager.LayoutParams(
+                      dp(290), WindowManager.LayoutParams.WRAP_CONTENT,
+                      WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                      WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                          WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+                      PixelFormat.TRANSLUCENT
+                  )
+                  params.gravity = Gravity.TOP or Gravity.START
+                  params.x = ((bp?.x ?: (screenW - dp(200))) + dp(90) - dp(145)).coerceIn(dp(4), (screenW - dp(294)).coerceAtLeast(dp(4)))
+                  params.y = ((bp?.y ?: dp(150)) + dp(210)).coerceAtMost(screenH - dp(260)).coerceAtLeast(dp(4))
+                  try { wm.addView(root, params) } catch (_: Exception) { speedPanel = null }
+              }
+
+              fun pos(): Int = try { if (ready) mp?.currentPosition ?: 0 else 0 } catch (_: Exception) { 0 }
+              fun dur(): Int = try { if (ready) mp?.duration ?: 0 else 0 } catch (_: Exception) { 0 }
+              fun playing(): Boolean = try { ready && (mp?.isPlaying ?: false) } catch (_: Exception) { false }
+
+              fun toggle() {
+                  if (!ready) return
+                  try {
+                      val m = mp ?: return
+                      if (m.isPlaying) m.pause() else m.start()
+                  } catch (_: Exception) {}
+                  bubble?.invalidate()
+              }
+
+              fun seekBy(ms: Int) = seekTo(pos() + ms)
+
+              fun seekTo(ms: Int) {
+                  if (!ready) return
+                  try { mp?.seekTo(ms.coerceIn(0, dur())) } catch (_: Exception) {}
+                  bubble?.invalidate()
+              }
+
+              fun setA() {
+                  if (!ready) return
+                  markA = pos()
+                  markB = -1
+                  loopA = -1
+                  loopB = -1
+                  Toast.makeText(this, "تم تحديد A عند ${fmt(markA)}", Toast.LENGTH_SHORT).show()
+                  bubble?.invalidate()
+              }
+
+              fun setB() {
+                  if (!ready) return
+                  if (markA < 0) {
+                      Toast.makeText(this, "حدّد A أولًا", Toast.LENGTH_SHORT).show()
+                      return
+                  }
+                  val b = pos()
+                  if (b <= markA + 100) {
+                      Toast.makeText(this, "يجب أن تكون B بعد A", Toast.LENGTH_SHORT).show()
+                      return
+                  }
+                  markB = b
+                  loopA = markA
+                  loopB = markB
+                  seekTo(loopA)
+                  if (!playing()) {
+                      try { mp?.start() } catch (_: Exception) {}
+                  }
+                  Toast.makeText(this, "بدأ التكرار بين A وB", Toast.LENGTH_SHORT).show()
+                  bubble?.invalidate()
+              }
+
+              fun cancelAB(showMessage: Boolean = true) {
+                  val active = loopA >= 0
+                  loopA = -1
+                  loopB = -1
+                  markA = -1
+                  markB = -1
+                  if (showMessage && active) {
+                      Toast.makeText(
+                          this, "أُلغي A-B، يستمر التشغيل العادي", Toast.LENGTH_SHORT
+                      ).show()
+                  }
+                  bubble?.invalidate()
+              }
+
+
+              fun appendTracks(items: JSONArray) {
+                  val wasEmpty = queue.length() == 0
+                  for (i in 0 until items.length()) {
+                      val item = items.optJSONObject(i) ?: continue
+                      queue.put(JSONObject().put("uri", item.optString("uri"))
+                          .put("name", item.optString("name", "صوتية")))
+                  }
+                  Toast.makeText(this, "أُضيفت ${items.length()} صوتية إلى قائمة التشغيل", Toast.LENGTH_SHORT).show()
+                  if (wasEmpty && queue.length() > 0) playAt(0, 0)
+                  refreshPlaylistPanel()
+                  bubble?.invalidate()
+              }
+
+              fun moveTrack(from: Int, to: Int) {
+                  if (from !in 0 until queue.length() || to !in 0 until queue.length()) return
+                  if (from == to) return
+                  val arr = ArrayList<JSONObject>()
+                  for (i in 0 until queue.length()) arr.add(queue.getJSONObject(i))
+                  val item = arr.removeAt(from)
+                  arr.add(to, item)
+                  queue = JSONArray()
+                  arr.forEach { queue.put(it) }
+                  idx = when {
+                      idx == from -> to
+                      from < idx && to >= idx -> idx - 1
+                      from > idx && to <= idx -> idx + 1
+                      else -> idx
+                  }
+                  refreshPlaylistPanel()
+                  bubble?.invalidate()
+              }
+
+              fun removeTrack(at: Int) {
+                  if (at !in 0 until queue.length()) return
+                  val removingCurrent = at == idx
+                  val arr = ArrayList<JSONObject>()
+                  for (i in 0 until queue.length()) if (i != at) arr.add(queue.getJSONObject(i))
+                  queue = JSONArray()
+                  arr.forEach { queue.put(it) }
+                  if (queue.length() == 0) {
+                      idx = 0
+                      try { mp?.release() } catch (_: Exception) {}
+                      mp = null
+                      ready = false
+                      curUri = ""
+                      curName = ""
+                      cancelAB(false)
+                      refreshPlaylistPanel()
+                      bubble?.invalidate()
+                      return
+                  }
+                  if (removingCurrent) {
+                      idx = at.coerceAtMost(queue.length() - 1)
+                      playAt(idx, 0)
+                  } else {
+                      if (at < idx) idx--
+                      refreshPlaylistPanel()
+                  }
+                  bubble?.invalidate()
+              }
+
+              fun requestAddTrack() {
+                  hidePlaylistPanel()
+                  try {
+                      val i = Intent(this, MainActivity::class.java)
+                      i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                      i.putExtra("pickForQueue", true)
+                      startActivity(i)
+                  } catch (_: Exception) {
+                      Toast.makeText(this, "افتح التطبيق لإضافة صوتية", Toast.LENGTH_SHORT).show()
+                  }
+              }
+
+              fun showPlaylistPanel() {
+                  if (queue.length() == 0) {
+                      hidePlaylistPanel()
+                      Toast.makeText(this, "قائمة التشغيل فارغة", Toast.LENGTH_SHORT).show()
+                      return
+                  }
+                  hideSpeedPanel()
+                  val root = LinearLayout(this)
+                  root.orientation = LinearLayout.VERTICAL
+                  root.setPadding(dp(12), dp(10), dp(12), dp(10))
+                  root.background = GradientDrawable().apply {
+                      setColor(Color.argb(246, 15, 24, 53))
+                      cornerRadius = dp(22).toFloat()
+                      setStroke(dp(1), Color.argb(70, 120, 190, 255))
+                  }
+                  val title = TextView(this).apply {
+                      text = "قائمة التشغيل  •  ${queue.length()} ملفات"
+                      setTextColor(Color.WHITE)
+                      textSize = 16f
+                      typeface = Typeface.DEFAULT_BOLD
+                      gravity = Gravity.CENTER_VERTICAL
+                      setPadding(dp(4), 0, dp(4), dp(8))
+                  }
+                  root.addView(title, LinearLayout.LayoutParams(-1, dp(36)))
+                  val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+                  val add = panelButton("＋ إضافة", "#2F8CF0") { requestAddTrack() }
+                  val close = panelButton("إغلاق", "#2A3566") { hidePlaylistPanel() }
+                  actions.addView(add, LinearLayout.LayoutParams(0, dp(42), 1f).apply { marginEnd = dp(6) })
+                  actions.addView(close, LinearLayout.LayoutParams(0, dp(42), 1f))
+                  root.addView(actions, LinearLayout.LayoutParams(-1, dp(42)).apply { bottomMargin = dp(8) })
+                  val scroll = ScrollView(this)
+                  val list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+                  for (i in 0 until queue.length()) {
+                      val item = queue.optJSONObject(i) ?: continue
+                      val row = LinearLayout(this).apply {
+                          orientation = LinearLayout.HORIZONTAL
+                          gravity = Gravity.CENTER_VERTICAL
+                          setPadding(dp(6), dp(4), dp(6), dp(4))
+                          background = GradientDrawable().apply {
+                              setColor(if (i == idx) Color.rgb(46, 66, 150) else Color.rgb(25, 38, 82))
+                              cornerRadius = dp(12).toFloat()
+                          }
+                      }
+                      val label = TextView(this).apply {
+                          text = (if (i == idx) "▶  " else "") + (i + 1) + ". " + item.optString("name", "صوتية")
+                          setTextColor(Color.WHITE)
+                          textSize = 12f
+                          maxLines = 2
+                          gravity = Gravity.CENTER_VERTICAL
+                          setPadding(dp(4), 0, dp(4), 0)
+                      }
+                      row.addView(label, LinearLayout.LayoutParams(0, dp(48), 1f))
+                      row.addView(panelButton("↑", "#2A3A78") { moveTrack(i, i - 1) }, LinearLayout.LayoutParams(dp(34), dp(38)).apply { marginStart = dp(3) })
+                      row.addView(panelButton("↓", "#2A3A78") { moveTrack(i, i + 1) }, LinearLayout.LayoutParams(dp(34), dp(38)).apply { marginStart = dp(3) })
+                      row.addView(panelButton("×", "#D6455D") { removeTrack(i) }, LinearLayout.LayoutParams(dp(34), dp(38)).apply { marginStart = dp(3) })
+                      list.addView(row, LinearLayout.LayoutParams(-1, dp(56)).apply { bottomMargin = dp(5) })
+                  }
+                  scroll.addView(list)
+                  root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+                  hidePlaylistPanel()
+                  playlistPanel = root
+                  val bp = bubble?.lp
+                  val screenW = resources.displayMetrics.widthPixels
+                  val params = WindowManager.LayoutParams(
+                      dp(300), dp(380),
+                      WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                      WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+                      PixelFormat.TRANSLUCENT
+                  )
+                  params.gravity = Gravity.TOP or Gravity.START
+                  params.x = ((bp?.x ?: (screenW - dp(200))) + dp(90) - dp(150)).coerceIn(dp(4), (screenW - dp(304)).coerceAtLeast(dp(4)))
+                  params.y = (((bp?.y ?: dp(150)) + dp(210)).coerceAtMost(resources.displayMetrics.heightPixels - dp(390))).coerceAtLeast(dp(4))
+                  try { wm.addView(root, params) } catch (_: Exception) { playlistPanel = null }
+              }
+
+              private fun panelButton(text: String, color: String, action: () -> Unit): Button =
+                  Button(this).apply {
+                      this.text = text
+                      textSize = 11f
+                      isAllCaps = false
+                      setTextColor(Color.WHITE)
+                      background = GradientDrawable().apply {
+                          setColor(Color.parseColor(color))
+                          cornerRadius = dp(12).toFloat()
+                      }
+                      setPadding(dp(2), 0, dp(2), 0)
+                      setOnClickListener { action() }
+                  }
+
+              fun hidePlaylistPanel() {
+                  playlistPanel?.let { try { wm.removeView(it) } catch (_: Exception) {} }
+                  playlistPanel = null
+              }
+
+              private fun refreshPlaylistPanel() {
+                  if (playlistPanel != null) showPlaylistPanel()
+              }
+
+              fun stateJson(): String = try {
+                  JSONObject()
+                      .put("uri", curUri)
+                      .put("playing", playing())
+                      .put("pos", pos())
+                      .put("dur", dur())
+                      .put("loopA", loopA)
+                      .put("loopB", loopB)
+                      .toString()
+              } catch (_: Exception) { "{}" }
+
+              fun dp(x: Int): Int = (x * resources.displayMetrics.density).toInt()
+
+              private fun ensureBubble() {
+                  if (bubble != null) return
+                  val v = BubbleView(this, this)
+                  val p = WindowManager.LayoutParams(
+                      dp(180), dp(204),
+                      WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                      WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+                      PixelFormat.TRANSLUCENT
+                  )
+                  p.gravity = Gravity.TOP or Gravity.START
+                  p.x = resources.displayMetrics.widthPixels - dp(200)
+                  p.y = dp(150)
+                  v.lp = p
+                  wm.addView(v, p)
+                  bubble = v
+              }
+
+              fun closeAll() {
+                  hideSpeedPanel()
+                  hidePlaylistPanel()
+                  bubble?.let { try { wm.removeView(it) } catch (_: Exception) {} }
+                  bubble = null
+                  h.removeCallbacksAndMessages(null)
+                  try { mp?.release() } catch (_: Exception) {}
+                  mp = null
+                  ready = false
+                  curUri = ""
+                  stopForeground(STOP_FOREGROUND_REMOVE)
+                  stopSelf()
+              }
+          }
+
+          class BubbleView(ctx: Context, private val svc: PlayerService) : View(ctx) {
+              var lp: WindowManager.LayoutParams? = null
+              private val d = ctx.resources.displayMetrics.density
+              private val vw = 180f * d
+              private val vh = 204f * d
+              private val c = 90f * d
+              private val ring = 54f * d
+              private val pt = Paint(Paint.ANTI_ALIAS_FLAG)
+              private val byBtn = 165f * d
+              private var downX = 0f
+              private var downY = 0f
+              private var sx = 0
+              private var sy = 0
+              private var zone = 0
+              private var moved = false
+              private var scrub = false
+              private var scrubFrac = 0f
+              private var scrubLastAngle = 0f
+
+              override fun onMeasure(w: Int, h: Int) {
+                  setMeasuredDimension(vw.toInt(), vh.toInt())
+              }
+
+              private fun mark(cv: Canvas, ms: Int, duration: Int, color: String) {
+                  if (duration <= 0) return
+                  val a = Math.toRadians(-90.0 + 360.0 * ms.toDouble() / duration)
+                  pt.color = Color.parseColor(color)
+                  cv.drawCircle(
+                      c + ring * Math.cos(a).toFloat(),
+                      c + ring * Math.sin(a).toFloat(),
+                      5 * d, pt
+                  )
+              }
+
+              private fun button(cv: Canvas, x: Float, y: Float, label: String, color: String) {
+                  pt.style = Paint.Style.FILL
+                  pt.color = Color.parseColor(color)
+                  cv.drawRoundRect(
+                      RectF(x - 15*d, y - 11*d, x + 15*d, y + 11*d),
+                      9*d, 9*d, pt
+                  )
+                  pt.color = Color.WHITE
+                  pt.textAlign = Paint.Align.CENTER
+                  pt.typeface = Typeface.DEFAULT_BOLD
+                  pt.textSize = 11*d
+                  cv.drawText(label, x, y + 4*d, pt)
+              }
+
+              override fun onDraw(cv: Canvas) {
+                  super.onDraw(cv)
+                  val duration = svc.dur()
+                  val real = if (duration > 0) svc.pos().toFloat() / duration else 0f
+                  val frac = if (scrub) scrubFrac else real
+                  val shownMs = if (scrub && duration > 0) (scrubFrac * duration).toInt() else svc.pos()
+
+                  // مسار التايملاين
+                  pt.style = Paint.Style.STROKE
+                  pt.strokeWidth = 4*d
+                  pt.color = Color.parseColor("#2A3A78")
+                  cv.drawCircle(c, c, ring, pt)
+
+                  // التقدم بتدرج ألوان
+                  pt.strokeCap = Paint.Cap.ROUND
+                  pt.shader = SweepGradient(
+                      c, c,
+                      intArrayOf(
+                          Color.parseColor("#FF8A4C"), Color.parseColor("#F05AE8"),
+                          Color.parseColor("#3DB8F5"), Color.parseColor("#5CE06A"),
+                          Color.parseColor("#FF8A4C")
+                      ),
+                      null
+                  )
+                  cv.save()
+                  cv.rotate(-90f, c, c)
+                  cv.drawArc(RectF(c-ring, c-ring, c+ring, c+ring), 0f, 360f*frac, false, pt)
+                  cv.restore()
+                  pt.shader = null
+                  pt.strokeCap = Paint.Cap.BUTT
+                  pt.style = Paint.Style.FILL
+
+                  if (duration > 0) {
+                      if (svc.markA >= 0) mark(cv, svc.markA, duration, "#FF4FA3")
+                      if (svc.markB >= 0) mark(cv, svc.markB, duration, "#FFD23F")
+                  }
+
+                  val angle = Math.toRadians(-90.0 + 360.0*frac)
+                  pt.color = Color.WHITE
+                  cv.drawCircle(
+                      c + ring*Math.cos(angle).toFloat(),
+                      c + ring*Math.sin(angle).toFloat(),
+                      6*d, pt
+                  )
+
+                  // القرص الداخلي
+                  pt.color = Color.parseColor("#18285E")
+                  cv.drawCircle(c, c, 42*d, pt)
+                  pt.style = Paint.Style.STROKE
+                  pt.strokeWidth = 2*d
+                  pt.color = Color.parseColor("#3C5BB0")
+                  cv.drawCircle(c, c, 42*d, pt)
+                  pt.style = Paint.Style.FILL
+                  pt.shader = LinearGradient(
+                      c-21*d, c-21*d, c+21*d, c+21*d,
+                      Color.parseColor("#FF8A4C"), Color.parseColor("#F05AE8"),
+                      Shader.TileMode.CLAMP
+                  )
+                  cv.drawCircle(c, c, 21*d, pt)
+                  pt.shader = null
+                  pt.color = Color.WHITE
+
+                  if (svc.playing()) {
+                      cv.drawRect(c-7*d, c-9*d, c-2*d, c+9*d, pt)
+                      cv.drawRect(c+3*d, c-9*d, c+8*d, c+9*d, pt)
+                  } else {
+                      val path = Path()
+                      path.moveTo(c-5*d, c-10*d)
+                      path.lineTo(c-5*d, c+10*d)
+                      path.lineTo(c+11*d, c)
+                      path.close()
+                      cv.drawPath(path, pt)
+                  }
+
+                  pt.color = Color.WHITE
+                  pt.textAlign = Paint.Align.CENTER
+                  pt.typeface = Typeface.DEFAULT_BOLD
+                  pt.textSize = 18*d
+                  cv.drawText("«", c-31*d, c+3*d, pt)
+                  cv.drawText("»", c+31*d, c+3*d, pt)
+                  pt.textSize = 9*d
+                  cv.drawText("15", c-31*d, c+16*d, pt)
+                  cv.drawText("15", c+31*d, c+16*d, pt)
+
+                  if (svc.loopA >= 0 && svc.loopB > svc.loopA) {
+                      pt.color = Color.parseColor("#FFD23F")
+                      pt.textSize = 9*d
+                      cv.drawText("A-B", c, c-28*d, pt)
+                  }
+
+                  // زر القائمة (أعلى اليسار) وزر الإغلاق (أعلى اليمين)
+                  pt.color = Color.parseColor("#1B2B5E")
+                  cv.drawCircle(16*d, 16*d, 12*d, pt)
+                  cv.drawCircle(vw-16*d, 16*d, 12*d, pt)
+                  pt.color = Color.WHITE
+                  pt.textSize = 14*d
+                  cv.drawText("≡", 16*d, 21*d, pt)
+                  cv.drawText("×", vw-16*d, 21*d, pt)
+
+                  // شارة السرعة (أعلى الوسط)
+                  pt.shader = LinearGradient(
+                      c-27*d, 0f, c+27*d, 0f,
+                      Color.parseColor("#3DB8F5"), Color.parseColor("#8B5CF6"),
+                      Shader.TileMode.CLAMP
+                  )
+                  cv.drawRoundRect(RectF(c-27*d, 3*d, c+27*d, 25*d), 11*d, 11*d, pt)
+                  pt.shader = null
+                  pt.color = Color.WHITE
+                  pt.textSize = 11*d
+                  cv.drawText(svc.playbackSpeedLabel(), c, 18*d, pt)
+
+                  // أزرار A و B وإلغاء (بعيدة عن التايملاين)
+                  button(cv, c-40*d, byBtn, "A", if (svc.markA >= 0) "#E2409F" else "#26356B")
+                  button(cv, c, byBtn, "B", if (svc.loopB >= 0) "#F5A524" else "#26356B")
+                  button(cv, c+40*d, byBtn, "×", if (svc.loopA >= 0) "#F0506E" else "#26356B")
+
+                  // عداد موضع التشغيل: الحالي / الكلي
+                  pt.style = Paint.Style.FILL
+                  pt.color = Color.parseColor("#1B2B5E")
+                  cv.drawRoundRect(RectF(c-52*d, 182*d, c+52*d, 202*d), 10*d, 10*d, pt)
+                  pt.style = Paint.Style.STROKE
+                  pt.strokeWidth = 1*d
+                  pt.color = Color.parseColor("#3C5BB0")
+                  cv.drawRoundRect(RectF(c-52*d, 182*d, c+52*d, 202*d), 10*d, 10*d, pt)
+                  pt.style = Paint.Style.FILL
+                  pt.color = if (scrub) Color.parseColor("#4CC3FF") else Color.WHITE
+                  pt.textSize = 11*d
+                  pt.typeface = Typeface.DEFAULT_BOLD
+                  cv.drawText(fmt(shownMs) + " / " + fmt(duration), c, 196*d, pt)
+              }
+
+              private fun angleAt(x: Float, y: Float): Float {
+                  var deg = Math.toDegrees(
+                      Math.atan2((y-c).toDouble(), (x-c).toDouble())
+                  ).toFloat() + 90f
+                  if (deg < 0f) deg += 360f
+                  if (deg >= 360f) deg -= 360f
+                  return deg
+              }
+
+              private fun hit(x: Float, y: Float): Int {
+                  fun dist(ax: Float, ay: Float): Float =
+                      Math.hypot((x-ax).toDouble(), (y-ay).toDouble()).toFloat()
+
+                  if (dist(vw-16*d, 16*d) < 18*d) return 4
+                  if (dist(16*d, 16*d) < 18*d) return 5
+                  if (Math.abs(x-c) < 29*d && y < 28*d) return 10
+                  if (dist(c-40*d, byBtn) < 19*d) return 7
+                  if (dist(c, byBtn) < 19*d) return 8
+                  if (dist(c+40*d, byBtn) < 19*d) return 9
+                  if (dist(c, c) < 24*d) return 1
+
+                  if (y > c-26*d && y < c+26*d) {
+                      if (x > c-43*d && x < c-24*d) return 2
+                      if (x > c+24*d && x < c+43*d) return 3
+                  }
+
+                  val r = dist(c, c)
+                  if (r > 46*d && r < 66*d && svc.dur() > 0) return 6
+                  return 0
+              }
+
+              override fun onTouchEvent(e: MotionEvent): Boolean {
+                  when (e.actionMasked) {
+                      MotionEvent.ACTION_DOWN -> {
+                          downX = e.rawX
+                          downY = e.rawY
+                          sx = lp?.x ?: 0
+                          sy = lp?.y ?: 0
+                          zone = hit(e.x, e.y)
+                          moved = false
+                          scrub = zone == 6
+                          if (scrub) {
+                              scrubLastAngle = angleAt(e.x, e.y)
+                              scrubFrac = scrubLastAngle / 360f
+                          }
+                          invalidate()
+                          return true
+                      }
+
+                      MotionEvent.ACTION_MOVE -> {
+                          if (scrub) {
+                              val nowAngle = angleAt(e.x, e.y)
+                              var delta = nowAngle - scrubLastAngle
+                              if (delta > 180f) delta -= 360f
+                              if (delta < -180f) delta += 360f
+                              scrubFrac = (scrubFrac + delta / 360f).coerceIn(0f, 1f)
+                              scrubLastAngle = nowAngle
+                              invalidate()
+                          } else {
+                              val dx = e.rawX-downX
+                              val dy = e.rawY-downY
+                              if (!moved && Math.hypot(dx.toDouble(), dy.toDouble()) > 12*d) {
+                                  moved = true
+                              }
+                              if (moved) {
+                                  val p = lp
+                                  if (p != null) {
+                                      p.x = sx+dx.toInt()
+                                      p.y = sy+dy.toInt()
+                                      try { svc.wm.updateViewLayout(this, p) } catch (_: Exception) {}
+                                  }
+                              }
+                          }
+                      }
+
+                      MotionEvent.ACTION_UP -> {
+                          if (scrub) {
+                              svc.seekTo((scrubFrac*svc.dur()).toInt())
+                              scrub = false
+                          } else if (!moved) {
+                              when (zone) {
+                                  1 -> svc.toggle()
+                                  2 -> svc.seekBy(-15000)
+                                  3 -> svc.seekBy(15000)
+                                  4 -> svc.closeAll()
+                                  5 -> svc.showPlaylistPanel()
+                                  7 -> svc.setA()
+                                  8 -> svc.setB()
+                                  9 -> svc.cancelAB()
+                                  10 -> svc.showSpeedPicker()
+                              }
+                          }
+                          invalidate()
+                      }
+
+                      MotionEvent.ACTION_CANCEL -> {
+                          scrub = false
+                          invalidate()
+                      }
+                  }
+                  return true
+              }
+          }
+          EOF
+
+          cat > app/src/main/assets/index.html <<'EOF'
+          <!DOCTYPE html>
+          <html lang="ar" dir="rtl">
+          <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width,initial-scale=1">
+          <style>
+          :root{--bg:#0f1835;--tx:#f3f6ff;--mu:#9fb0dc;--b:#4cc3ff;--p:#f05ae8;--o:#ff8a4c;--g:#5ce06a;--line:rgba(255,255,255,.09)}
+          *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+          body{margin:0;padding:18px 14px 70px;color:var(--tx);font-family:sans-serif;min-height:100vh;
+            background:radial-gradient(90% 45% at 100% 0%,rgba(139,92,246,.30),transparent 70%),
+                       radial-gradient(80% 40% at 0% 100%,rgba(61,184,245,.22),transparent 70%),
+                       radial-gradient(60% 30% at 0% 0%,rgba(255,138,76,.14),transparent 70%),var(--bg);
+            background-attachment:fixed}
+          h1{display:flex;align-items:center;gap:10px;font-size:22px;margin:2px 2px 14px}
+          h1 img{width:44px;height:44px;border-radius:13px;box-shadow:0 6px 18px rgba(0,0,0,.35)}
+          h1 span{background:linear-gradient(90deg,#ff8a4c,#f05ae8 50%,#4cc3ff);-webkit-background-clip:text;background-clip:text;color:transparent;font-weight:800}
+          h3{margin:20px 4px 6px;color:var(--mu);font-size:14px;font-weight:700;letter-spacing:.3px}
+          .btn{display:block;width:100%;border:0;border-radius:16px;padding:14px;margin:8px 0;font:inherit;font-weight:700;color:#fff;
+            background:linear-gradient(135deg,#3aa8ff,#9a5cff 55%,#f05ae8);box-shadow:0 8px 22px rgba(154,92,255,.30);transition:transform .15s,opacity .15s}
+          .btn:active{transform:scale(.97);opacity:.92}
+          .btn.s{background:rgba(255,255,255,.07);border:1px solid var(--line);box-shadow:none}
+          .card{display:flex;align-items:center;gap:12px;background:rgba(255,255,255,.06);border:1px solid var(--line);border-radius:20px;padding:12px 14px;margin:9px 0;transition:transform .15s,background .2s}
+          .card:active{transform:scale(.985)}
+          .card .t{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+          .card small{display:block;color:var(--mu);margin-top:2px}
+          .ic{border:0;border-radius:13px;width:40px;height:40px;font-size:17px;background:rgba(240,80,110,.16);color:var(--tx);flex-shrink:0}
+          .ic.rename{background:rgba(76,195,255,.16)}
+          .cur{border-color:rgba(76,195,255,.55);background:linear-gradient(135deg,rgba(76,195,255,.16),rgba(240,90,232,.12));box-shadow:0 6px 22px rgba(76,195,255,.16)}
+          .note{color:var(--mu);font-size:13px;padding:8px 4px}
+          </style>
+          </head>
+          <body>
+          <h1><img src="logo.png" alt=""><span>مشغّل الدراسة</span></h1>
+          <div id="app"></div>
+          <script>
+          let S;
+          try { S = JSON.parse(localStorage.getItem('st') || 'null'); } catch (e) { S = null; }
+          if (!S) S = {lists:[],last:null,open:null};
+          S.open = null;
+          let target = null;
+          const save = () => { try { localStorage.setItem('st',JSON.stringify(S)); } catch(e){} };
+          const uid = () => Math.random().toString(36).slice(2,9);
+          const L = id => S.lists.find(l => l.id == id);
+          const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+          const fmt = ms => Math.floor(ms/60000)+':'+String(Math.floor(ms/1000)%60).padStart(2,'0');
+
+          function addNew(){target=null;Android.pick();}
+          function addTo(id){target=id;Android.pick();}
+          function onPicked(a){
+            if(!a.length)return;
+            const tr=a.map(x=>({id:uid(),name:x.name,uri:x.uri}));
+            if(target&&L(target))L(target).tracks.push(...tr);
+            else S.lists.push({id:uid(),name:a.length>1?'قائمة '+(S.lists.length+1):tr[0].name,tracks:tr});
+            save();render();
+          }
+          function play(lid,tid,pos){
+            const l=L(lid);if(!l)return;
+            const i=l.tracks.findIndex(t=>t.id==tid);if(i<0)return;
+            S.last={l:lid,t:tid,pos:pos||0};save();
+            Android.play(JSON.stringify(l.tracks.map(t=>({uri:t.uri,name:t.name}))),i,pos||0);
+            render();
+          }
+          function tap(lid,tid){play(lid,tid,S.last&&S.last.t==tid?S.last.pos:0);}
+          function resume(){const x=S.last;if(x&&L(x.l))play(x.l,x.t,x.pos);}
+          function openL(id){S.open=id;render();}
+          function renameL(id){
+            const l=L(id);if(!l)return;
+            const n=prompt('اكتب الاسم الجديد لقائمة التشغيل:',l.name);
+            if(n===null)return;
+            const v=n.trim();
+            if(!v){alert('اكتب اسمًا غير فارغ.');return;}
+            l.name=v;save();render();
+          }
+          function delL(id){
+            if(!confirm('حذف القائمة؟'))return;
+            S.lists=S.lists.filter(l=>l.id!=id);save();render();
+          }
+          function delT(lid,tid){
+            const l=L(lid);if(!l)return;
+            l.tracks=l.tracks.filter(t=>t.id!=tid);save();render();
+          }
+          function goBack(){
+            if(S.open){S.open=null;render();return false;}
+            return true;
+          }
+          function render(){
+            const a=document.getElementById('app');
+            if(!S.open){
+              const x=S.last&&L(S.last.l);
+              a.innerHTML='<button class="btn" onclick="addNew()">＋ إضافة صوتية / قائمة جديدة</button>'+
+                (x?`<button class="btn s" onclick="resume()">▶ متابعة آخر صوتية (${fmt(S.last.pos)})</button>`:'')+
+                '<h3>قوائم التشغيل</h3>'+
+                (S.lists.map(l=>`<div class="card${S.last&&S.last.l==l.id?' cur':''}" onclick="openL('${l.id}')"><span style="font-size:24px">📁</span><div class="t">${esc(l.name)}<small>${l.tracks.length} ملف</small></div><button class="ic rename" title="إعادة تسمية" onclick="event.stopPropagation();renameL('${l.id}')">✏️</button><button class="ic" title="حذف القائمة" onclick="event.stopPropagation();delL('${l.id}')">🗑</button></div>`).join('')||'<div class="note">لا توجد قوائم بعد. أضف صوتياتك للبدء.</div>');
+            }else{
+              const l=L(S.open);
+              if(!l){S.open=null;render();return;}
+              a.innerHTML='<button class="btn s" onclick="goBack()">→ رجوع</button>'+
+                `<h3>📁 ${esc(l.name)}</h3>`+
+                `<button class="btn s" onclick="renameL('${l.id}')">✏️ إعادة تسمية قائمة التشغيل</button>`+
+                `<button class="btn" onclick="addTo('${l.id}')">＋ إضافة ملفات للقائمة</button>`+
+                (l.tracks.map(t=>`<div class="card${S.last&&S.last.t==t.id?' cur':''}" onclick="tap('${l.id}','${t.id}')"><span style="font-size:22px">🎵</span><div class="t">${esc(t.name)}</div><button class="ic" onclick="event.stopPropagation();delT('${l.id}','${t.id}')">🗑</button></div>`).join('')||'<div class="note">القائمة فارغة.</div>');
+            }
+          }
+          setInterval(()=>{
+            try{
+              const s=JSON.parse(Android.state());if(!s.uri)return;
+              for(const l of S.lists){
+                const t=l.tracks.find(t=>t.uri==s.uri);
+                if(t){
+                  const ch=!S.last||S.last.t!=t.id;
+                  S.last={l:l.id,t:t.id,pos:s.pos};save();
+                  if(ch)render();
+                  return;
+                }
+              }
+            }catch(e){}
+          },1000);
+          render();
+          </script>
+          </body>
+          </html>
+          EOF
 
       - name: Build debug APK
-        run: gradle --no-daemon --stacktrace assembleDebug
+        working-directory: proj
+        run: gradle assembleDebug --no-daemon --stacktrace
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: sawti-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
+          name: FloatPlayer-APK
+          path: proj/app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Publish APK to Releases
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "v${{ github.run_number }}" proj/app/build/outputs/apk/debug/app-debug.apk --title "FloatPlayer v${{ github.run_number }}" --notes "ملف التثبيت app-debug.apk"
