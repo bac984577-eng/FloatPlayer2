@@ -27,49 +27,36 @@ jobs:
           gradle-version: '8.7'
 
       - name: Accept Android licenses
-        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null 2>&1 || true
 
       - name: Generate Android project
         shell: bash
         run: |
-          mkdir -p proj/app/src/main/java/com/floatplayer
-          mkdir -p proj/app/src/main/assets
-          mkdir -p proj/app/src/main/res/values
-          mkdir -p proj/app/src/main/res/drawable
+          set -e
+          mkdir -p proj/app/src/main/java/com/floatplayer proj/app/src/main/assets proj/app/src/main/res/values proj/app/src/main/res/drawable
           cd proj
 
-          cat > settings.gradle <<'EOF'
-          pluginManagement {
-              repositories {
-                  google()
-                  mavenCentral()
-                  gradlePluginPortal()
-              }
-          }
-          dependencyResolutionManagement {
-              repositories {
-                  google()
-                  mavenCentral()
-              }
-          }
+          cat > settings.gradle <<'GRADLE'
+          pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
+          dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
           rootProject.name = 'FloatPlayer'
           include ':app'
-          EOF
+          GRADLE
 
-          cat > build.gradle <<'EOF'
+          cat > build.gradle <<'GRADLE'
           plugins {
               id 'com.android.application' version '8.5.2' apply false
               id 'org.jetbrains.kotlin.android' version '1.9.24' apply false
           }
-          EOF
+          GRADLE
 
-          cat > gradle.properties <<'EOF'
+          cat > gradle.properties <<'GRADLE'
           org.gradle.jvmargs=-Xmx3g -Dfile.encoding=UTF-8
           android.useAndroidX=true
           kotlin.code.style=official
-          EOF
+          GRADLE
 
-          cat > app/build.gradle <<'EOF'
+          cat > app/build.gradle <<'GRADLE'
           plugins {
               id 'com.android.application'
               id 'org.jetbrains.kotlin.android'
@@ -77,78 +64,46 @@ jobs:
           android {
               namespace 'com.floatplayer'
               compileSdk 34
-              defaultConfig {
-                  applicationId 'com.floatplayer'
-                  minSdk 26
-                  targetSdk 33
-                  versionCode 1
-                  versionName '1.0'
-              }
-              compileOptions {
-                  sourceCompatibility JavaVersion.VERSION_17
-                  targetCompatibility JavaVersion.VERSION_17
-              }
+              defaultConfig { applicationId 'com.floatplayer'; minSdk 26; targetSdk 33; versionCode 2; versionName '1.1' }
+              compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
               kotlinOptions { jvmTarget = '17' }
           }
-          EOF
+          GRADLE
 
-          cat > app/src/main/AndroidManifest.xml <<'EOF'
+          cat > app/src/main/AndroidManifest.xml <<'XML'
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
               <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
               <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
               <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>
               <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
-              <application
-                  android:label="مشغّل الدراسة"
-                  android:icon="@drawable/ic_launcher"
-                  android:allowBackup="false"
-                  android:supportsRtl="true"
-                  android:theme="@android:style/Theme.Material.Light.NoActionBar">
-                  <activity
-                      android:name=".MainActivity"
-                      android:exported="true"
-                      android:configChanges="orientation|screenSize|keyboardHidden">
-                      <intent-filter>
-                          <action android:name="android.intent.action.MAIN"/>
-                          <category android:name="android.intent.category.LAUNCHER"/>
-                      </intent-filter>
+              <application android:label="مشغّل الدراسة" android:icon="@drawable/ic_launcher" android:allowBackup="false" android:supportsRtl="true" android:theme="@android:style/Theme.Material.Light.NoActionBar">
+                  <activity android:name=".MainActivity" android:exported="true" android:configChanges="orientation|screenSize|keyboardHidden" android:windowSoftInputMode="adjustResize">
+                      <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
                   </activity>
-                  <service
-                      android:name=".PlayerService"
-                      android:exported="false"
-                      android:foregroundServiceType="mediaPlayback"/>
+                  <service android:name=".PlayerService" android:exported="false" android:foregroundServiceType="mediaPlayback"/>
               </application>
           </manifest>
-          EOF
+          XML
 
-          cat > app/src/main/res/drawable/ic_launcher.xml <<'EOF'
+          cat > app/src/main/res/drawable/ic_launcher.xml <<'XML'
           <?xml version="1.0" encoding="utf-8"?>
-          <vector xmlns:android="http://schemas.android.com/apk/res/android"
-              android:width="108dp"
-              android:height="108dp"
-              android:viewportWidth="108"
-              android:viewportHeight="108">
-              <path android:fillColor="#0E2233" android:pathData="M0,0h108v108h-108z"/>
-              <path android:fillColor="#4CC2E8" android:pathData="M54,17C34.1,17 18,33.1 18,53v17c0,7.2 5.8,13 13,13h4c4.4,0 8,-3.6 8,-8V60c0,-4.4 -3.6,-8 -8,-8h-5v1C30,37.6 40.7,27 54,27s24,10.6 24,26v-1h-5c-4.4,0 -8,3.6 -8,8v15c0,4.4 3.6,8 8,8h4c7.2,0 13,-5.8 13,-13V53C90,33.1 73.9,17 54,17z"/>
-              <path android:fillColor="#FFFFFF" android:pathData="M48,42v27.1c-2.1,-1.6 -4.9,-2.3 -7.8,-1.7 -5,1 -8.1,5.1 -7.1,9.2 1,4.1 5.8,6.5 10.8,5.5 4.2,-0.9 7.1,-3.9 7.3,-7.2V52l19,-4.2v16.3c-2.1,-1.6 -4.9,-2.3 -7.8,-1.7 -5,1 -8.1,5.1 -7.1,9.2 1,4.1 5.8,6.5 10.8,5.5 4.2,-0.9 7.1,-3.9 7.3,-7.2V35z"/>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+              <path android:fillColor="#10182B" android:pathData="M0,0h108v108h-108z"/>
+              <path android:fillColor="#66E3CF" android:pathData="M54,12 C66,12 73,24 73,34 C73,43 65,49 54,54 C43,49 35,43 35,34 C35,24 42,12 54,12 Z"/>
+              <path android:fillColor="#8B7CFF" android:pathData="M96,54 C96,66 84,73 74,73 C65,73 59,65 54,54 C59,43 65,35 74,35 C84,35 96,42 96,54 Z"/>
+              <path android:fillColor="#FF7892" android:pathData="M54,96 C42,96 35,84 35,74 C35,65 43,59 54,54 C65,59 73,65 73,74 C73,84 66,96 54,96 Z"/>
+              <path android:fillColor="#FFC857" android:pathData="M12,54 C12,42 24,35 34,35 C43,35 49,43 54,54 C49,65 43,73 34,73 C24,73 12,66 12,54 Z"/>
+              <circle android:fillColor="#FFFFFF" android:cx="54" android:cy="54" android:radius="9"/>
           </vector>
-          EOF
+          XML
 
-          cat > app/src/main/res/values/styles.xml <<'EOF'
+          cat > app/src/main/res/values/styles.xml <<'XML'
           <?xml version="1.0" encoding="utf-8"?>
-          <resources>
-              <style name="AppTheme" parent="android:style/Theme.Material.Light.NoActionBar">
-                  <item name="android:fontFamily">sans</item>
-                  <item name="android:colorAccent">#4CC2E8</item>
-                  <item name="android:statusBarColor">#0E2233</item>
-                  <item name="android:navigationBarColor">#0E2233</item>
-                  <item name="android:windowLightStatusBar">false</item>
-              </style>
-          </resources>
-          EOF
+          <resources><style name="AppTheme" parent="android:style/Theme.Material.Light.NoActionBar"><item name="android:fontFamily">sans</item><item name="android:colorAccent">#66E3CF</item><item name="android:statusBarColor">#0B1424</item><item name="android:navigationBarColor">#0B1424</item><item name="android:windowLightStatusBar">false</item></style></resources>
+          XML
 
-          cat > app/src/main/java/com/floatplayer/MainActivity.kt <<'EOF'
+          cat > app/src/main/java/com/floatplayer/MainActivity.kt <<'KOTLIN'
           package com.floatplayer
 
           import android.app.Activity
@@ -168,136 +123,73 @@ jobs:
 
           class MainActivity : Activity() {
               private lateinit var web: WebView
-
-              override fun onCreate(b: Bundle?) {
-                  super.onCreate(b)
-                  window.statusBarColor = Color.rgb(14, 34, 51)
-                  window.navigationBarColor = Color.rgb(14, 34, 51)
+              override fun onCreate(savedInstanceState: Bundle?) {
+                  super.onCreate(savedInstanceState)
+                  window.statusBarColor = Color.rgb(11,20,36)
+                  window.navigationBarColor = Color.rgb(11,20,36)
                   web = WebView(this)
                   web.settings.javaScriptEnabled = true
                   web.settings.domStorageEnabled = true
                   web.webChromeClient = WebChromeClient()
-                  web.setBackgroundColor(Color.rgb(14, 34, 51))
+                  web.setBackgroundColor(Color.rgb(11,20,36))
                   web.addJavascriptInterface(Bridge(), "Android")
                   setContentView(web)
                   web.loadUrl("file:///android_asset/index.html")
-                  if (intent?.getBooleanExtra("pickForQueue", false) == true) {
-                      intent.removeExtra("pickForQueue")
-                      web.post { openPicker(8) }
+                  if (Build.VERSION.SDK_INT >= 33) requestPermissions(arrayOf("android.permission.POST_NOTIFICATIONS"), 1)
+              }
+              private fun pickAudio() {
+                  val i = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                      addCategory(Intent.CATEGORY_OPENABLE); type = "audio/*"
+                      putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+                      addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
                   }
-                  if (Build.VERSION.SDK_INT >= 33) {
-                      requestPermissions(arrayOf("android.permission.POST_NOTIFICATIONS"), 1)
-                  }
+                  startActivityForResult(i, 7)
               }
-
-              override fun onNewIntent(intent: Intent?) {
-                  super.onNewIntent(intent)
-                  setIntent(intent)
-                  if (intent?.getBooleanExtra("pickForQueue", false) == true) {
-                      intent.removeExtra("pickForQueue")
-                      web.post { openPicker(8) }
-                  }
+              private fun nameOf(uri: Uri): String {
+                  var name = "صوتية"
+                  try { contentResolver.query(uri, null, null, null, null)?.use { c -> if (c.moveToFirst()) { val ix=c.getColumnIndex(OpenableColumns.DISPLAY_NAME); if(ix>=0) name=c.getString(ix) } } } catch (_: Exception) {}
+                  return name.substringBeforeLast('.')
               }
-
-              private fun openPicker(requestCode: Int) {
-                  val i = Intent(Intent.ACTION_OPEN_DOCUMENT)
-                  i.addCategory(Intent.CATEGORY_OPENABLE)
-                  i.type = "audio/*"
-                  i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
-                  i.addFlags(
-                      Intent.FLAG_GRANT_READ_URI_PERMISSION or
-                      Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
-                  )
-                  startActivityForResult(i, requestCode)
-              }
-
-              override fun onBackPressed() {
-                  web.evaluateJavascript("goBack()") {
-                      if (it == "true") finish()
-                  }
-              }
-
-              private fun nameOf(u: Uri): String {
-                  var n = "صوتية"
-                  try {
-                      contentResolver.query(u, null, null, null, null)?.use { c ->
-                          if (c.moveToFirst()) {
-                              val i = c.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                              if (i >= 0) n = c.getString(i)
-                          }
-                      }
-                  } catch (_: Exception) {}
-                  return n.substringBeforeLast('.')
-              }
-
               @Deprecated("Deprecated in Android")
-              override fun onActivityResult(rc: Int, res: Int, d: Intent?) {
-                  super.onActivityResult(rc, res, d)
-                  if ((rc == 7 || rc == 8) && res == RESULT_OK && d != null) {
-                      val uris = ArrayList<Uri>()
-                      val cd = d.clipData
-                      if (cd != null) {
-                          for (i in 0 until cd.itemCount) uris.add(cd.getItemAt(i).uri)
-                      } else if (d.data != null) uris.add(d.data!!)
-                      val arr = JSONArray()
-                      for (u in uris) {
-                          try {
-                              contentResolver.takePersistableUriPermission(
-                                  u, Intent.FLAG_GRANT_READ_URI_PERMISSION
-                              )
-                          } catch (_: Exception) {}
-                          arr.put(JSONObject().put("uri", u.toString()).put("name", nameOf(u)))
-                      }
-                      if (rc == 8) {
-                          PlayerService.inst?.appendTracks(arr)
-                      } else {
-                          web.evaluateJavascript("onPicked(" + arr.toString() + ")", null)
-                      }
+              override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+                  super.onActivityResult(requestCode, resultCode, data)
+                  if (requestCode != 7 || resultCode != RESULT_OK || data == null) return
+                  val uris = ArrayList<Uri>()
+                  data.clipData?.let { clip -> for (i in 0 until clip.itemCount) uris.add(clip.getItemAt(i).uri) } ?: data.data?.let { uris.add(it) }
+                  val arr = JSONArray()
+                  for (u in uris) {
+                      try { contentResolver.takePersistableUriPermission(u, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
+                      arr.put(JSONObject().put("uri",u.toString()).put("name",nameOf(u)))
                   }
+                  web.evaluateJavascript("onPicked(${arr.toString()})", null)
               }
-
+              override fun onBackPressed() { web.evaluateJavascript("goBack()") { if (it == "true") finish() } }
               inner class Bridge {
-                  @JavascriptInterface
-                  fun pick() {
-                      runOnUiThread { openPicker(7) }
-                  }
-
-                  @JavascriptInterface
-                  fun play(q: String, i: Int, p: Int) {
+                  @JavascriptInterface fun pick() { runOnUiThread { pickAudio() } }
+                  @JavascriptInterface fun requestOverlay() { runOnUiThread { if (!Settings.canDrawOverlays(this@MainActivity)) startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))) } }
+                  @JavascriptInterface fun play(queue: String, index: Int, position: Int) {
                       runOnUiThread {
                           if (!Settings.canDrawOverlays(this@MainActivity)) {
-                              Toast.makeText(
-                                  this@MainActivity,
-                                  "فعّل العرض فوق التطبيقات الأخرى ثم اضغط تشغيل مجددًا",
-                                  Toast.LENGTH_LONG
-                              ).show()
-                              startActivity(
-                                  Intent(
-                                      Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                                      Uri.parse("package:" + packageName)
-                                  )
-                              )
-                          } else {
-                              val s = Intent(this@MainActivity, PlayerService::class.java)
-                              s.putExtra("queue", q)
-                              s.putExtra("idx", i)
-                              s.putExtra("pos", p)
-                              if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                                  startForegroundService(s)
-                              } else {
-                                  startService(s)
-                              }
+                              Toast.makeText(this@MainActivity,"فعّل السماح بالظهور فوق التطبيقات أولًا",Toast.LENGTH_LONG).show()
+                              startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
+                              return@runOnUiThread
                           }
+                          val i=Intent(this@MainActivity,PlayerService::class.java).putExtra("queue",queue).putExtra("idx",index).putExtra("pos",position)
+                          if (Build.VERSION.SDK_INT >= 26) startForegroundService(i) else startService(i)
                       }
                   }
-
-                  @JavascriptInterface
-                  fun state(): String = PlayerService.inst?.stateJson() ?: "{}"
+                  @JavascriptInterface fun toggle() { runOnUiThread { PlayerService.inst?.toggle() } }
+                  @JavascriptInterface fun stop() { runOnUiThread { PlayerService.inst?.stopTrack() } }
+                  @JavascriptInterface fun next() { runOnUiThread { PlayerService.inst?.nextTrack() } }
+                  @JavascriptInterface fun previous() { runOnUiThread { PlayerService.inst?.previousTrack() } }
+                  @JavascriptInterface fun seekTo(ms: Int) { runOnUiThread { PlayerService.inst?.seekTo(ms) } }
+                  @JavascriptInterface fun speed(value: Float) { runOnUiThread { PlayerService.inst?.setSpeed(value) } }
+                  @JavascriptInterface fun state(): String = PlayerService.inst?.stateJson() ?: "{}"
               }
           }
-          EOF
+          KOTLIN
 
-          cat > app/src/main/java/com/floatplayer/PlayerService.kt <<'EOF'
+          cat > app/src/main/java/com/floatplayer/PlayerService.kt <<'KOTLIN'
           package com.floatplayer
 
           import android.app.Notification
@@ -306,921 +198,84 @@ jobs:
           import android.app.Service
           import android.content.Context
           import android.content.Intent
-          import android.graphics.Canvas
           import android.graphics.Color
-          import android.graphics.Paint
-          import android.graphics.Path
           import android.graphics.PixelFormat
-          import android.graphics.RectF
           import android.graphics.Typeface
           import android.graphics.drawable.GradientDrawable
           import android.media.MediaPlayer
           import android.net.Uri
+          import android.os.Build
           import android.os.Handler
           import android.os.IBinder
           import android.os.Looper
           import android.view.Gravity
           import android.view.MotionEvent
           import android.view.View
-          import android.view.ViewGroup
           import android.view.WindowManager
           import android.widget.Button
           import android.widget.LinearLayout
-          import android.widget.ScrollView
-          import android.widget.SeekBar
           import android.widget.TextView
           import android.widget.Toast
-          import java.util.Locale
           import org.json.JSONArray
           import org.json.JSONObject
 
-          fun fmt(ms: Int): String {
-              val s = ms.coerceAtLeast(0) / 1000
-              return "%d:%02d".format(s / 60, s % 60)
-          }
-
           class PlayerService : Service() {
               companion object { var inst: PlayerService? = null }
-
-              lateinit var wm: WindowManager
+              private lateinit var wm: WindowManager
               private var mp: MediaPlayer? = null
-              private var ready = false
-              private var playbackSpeed = 1.0f
-              private var speedPanel: View? = null
-              private val prefs by lazy { getSharedPreferences("fp", Context.MODE_PRIVATE) }
-              private var queue = JSONArray()
-              private var idx = 0
-              var curUri = ""
-              var curName = ""
-              var markA = -1
-              var markB = -1
-              var loopA = -1
-              var loopB = -1
-              private var bubble: BubbleView? = null
-              private var playlistPanel: View? = null
-              private val h = Handler(Looper.getMainLooper())
-
-              private val tick = object : Runnable {
-                  override fun run() {
-                      try {
-                          val m = mp
-                          if (ready && m != null && m.isPlaying &&
-                              loopA >= 0 && loopB > loopA &&
-                              m.currentPosition >= loopB) {
-                              m.seekTo(loopA)
-                          }
-                          bubble?.invalidate()
-                      } catch (_: Exception) {}
-                      h.postDelayed(this, 100)
-                  }
-              }
-
-              override fun onBind(intent: Intent?): IBinder? = null
-
-              override fun onCreate() {
-                  super.onCreate()
-                  inst = this
-                  wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
-                  val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-                  nm.createNotificationChannel(
-                      NotificationChannel("pl", "المشغّل", NotificationManager.IMPORTANCE_LOW)
-                  )
-                  playbackSpeed = prefs.getFloat("speed", 1.0f)
-                  h.post(tick)
-              }
-
-              override fun onDestroy() {
-                  hideSpeedPanel()
-                  h.removeCallbacksAndMessages(null)
-                  try { mp?.release() } catch (_: Exception) {}
-                  mp = null
-                  inst = null
-                  super.onDestroy()
-              }
-
-              private fun notif(title: String): Notification =
-                  Notification.Builder(this, "pl")
-                      .setSmallIcon(android.R.drawable.ic_media_play)
-                      .setContentTitle(title)
-                      .setContentText("المشغّل العائم يعمل")
-                      .setOngoing(true)
-                      .build()
-
-              override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-                  startForeground(1, notif(if (curName.isEmpty()) "المشغّل" else curName))
-                  if (intent != null && intent.hasExtra("queue")) {
-                      queue = JSONArray(intent.getStringExtra("queue"))
-                      playAt(intent.getIntExtra("idx", 0), intent.getIntExtra("pos", 0))
-                  }
-                  return START_NOT_STICKY
-              }
-
-              private fun playAt(i: Int, startPos: Int) {
-                  if (i < 0 || i >= queue.length()) return
-                  val item = queue.getJSONObject(i)
-                  idx = i
-                  curUri = item.getString("uri")
-                  curName = item.getString("name")
-                  cancelAB(false)
-                  ready = false
-                  try { mp?.release() } catch (_: Exception) {}
-                  val player = MediaPlayer()
-                  mp = player
-                  try {
-                      player.setDataSource(this, Uri.parse(curUri))
-                      player.setOnPreparedListener {
-                          ready = true
-                          try { it.playbackParams = it.playbackParams.setSpeed(playbackSpeed) } catch (_: Exception) {}
-                          if (startPos > 0) it.seekTo(startPos.coerceAtMost(it.duration))
-                          it.start()
-                          bubble?.invalidate()
-                      }
-                      player.setOnCompletionListener {
-                          if (idx + 1 < queue.length()) playAt(idx + 1, 0)
-                      }
-                      player.setOnErrorListener { _, _, _ ->
-                          ready = false
-                          true
-                      }
-                      player.prepareAsync()
-                  } catch (_: Exception) {
-                      ready = false
-                      Toast.makeText(this, "تعذّر تشغيل الملف", Toast.LENGTH_SHORT).show()
-                  }
-                  val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-                  nm.notify(1, notif(curName))
-                  ensureBubble()
-                  refreshPlaylistPanel()
-              }
-
-              fun playbackSpeedLabel(): String {
-                  val s = "%.2f".format(Locale.US, playbackSpeed).trimEnd('0')
-                  return (if (s.endsWith(".")) s + "0" else s) + "×"
-              }
-
-              fun setSpeed(v: Float) {
-                  val s = (Math.round(v * 20) / 20f).coerceIn(0.5f, 3.0f)
-                  playbackSpeed = s
-                  prefs.edit().putFloat("speed", s).apply()
-                  val m = mp
-                  if (ready && m != null) {
-                      try {
-                          val was = m.isPlaying
-                          m.playbackParams = m.playbackParams.setSpeed(s)
-                          if (!was && m.isPlaying) m.pause()
-                      } catch (_: Exception) {
-                          Toast.makeText(this, "تعذّر تغيير السرعة لهذا الملف", Toast.LENGTH_SHORT).show()
-                      }
-                  }
-                  bubble?.invalidate()
-              }
-
-              fun hideSpeedPanel() {
-                  speedPanel?.let { try { wm.removeView(it) } catch (_: Exception) {} }
-                  speedPanel = null
-              }
-
-              fun showSpeedPicker() {
-                  if (speedPanel != null) { hideSpeedPanel(); return }
-                  hidePlaylistPanel()
-                  val root = LinearLayout(this).apply {
-                      orientation = LinearLayout.VERTICAL
-                      setPadding(dp(14), dp(12), dp(14), dp(12))
-                      background = GradientDrawable().apply {
-                          setColor(Color.rgb(14, 34, 51))
-                          cornerRadius = dp(20).toFloat()
-                          setStroke(dp(1), Color.rgb(76, 194, 232))
-                      }
-                  }
-                  val value = TextView(this).apply {
-                      textSize = 28f
-                      typeface = Typeface.DEFAULT_BOLD
-                      gravity = Gravity.CENTER
-                      setTextColor(Color.rgb(76, 194, 232))
-                  }
-                  val seek = SeekBar(this).apply { max = 50 }
-                  val chips = ArrayList<Pair<Float, Button>>()
-
-                  fun sync() {
-                      value.text = playbackSpeedLabel()
-                      seek.progress = Math.round((playbackSpeed - 0.5f) / 0.05f)
-                      chips.forEach { (v, b) ->
-                          val on = Math.abs(v - playbackSpeed) < 0.001f
-                          (b.background as GradientDrawable)
-                              .setColor(Color.parseColor(if (on) "#1e8fc0" else "#315b76"))
-                      }
-                  }
-
-                  // السطر العلوي: − القيمة +
-                  val top = LinearLayout(this).apply {
-                      orientation = LinearLayout.HORIZONTAL
-                      gravity = Gravity.CENTER_VERTICAL
-                  }
-                  top.addView(panelButton("−", "#315b76") { setSpeed(playbackSpeed - 0.05f); sync() },
-                      LinearLayout.LayoutParams(dp(48), dp(44)))
-                  top.addView(value, LinearLayout.LayoutParams(0, dp(44), 1f))
-                  top.addView(panelButton("+", "#315b76") { setSpeed(playbackSpeed + 0.05f); sync() },
-                      LinearLayout.LayoutParams(dp(48), dp(44)))
-                  root.addView(top, LinearLayout.LayoutParams(-1, dp(44)))
-
-                  seek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                      override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
-                          if (fromUser) { setSpeed(0.5f + p * 0.05f); sync() }
-                      }
-                      override fun onStartTrackingTouch(s: SeekBar?) {}
-                      override fun onStopTrackingTouch(s: SeekBar?) {}
-                  })
-                  root.addView(seek, LinearLayout.LayoutParams(-1, dp(40)).apply {
-                      topMargin = dp(6); bottomMargin = dp(6)
-                  })
-
-                  // الأزرار الجاهزة
-                  val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-                  for (v in floatArrayOf(0.75f, 1.0f, 1.25f, 1.5f, 2.0f)) {
-                      val label = if (v == v.toInt().toFloat()) "${v}×" else "$v×"
-                      val b = panelButton(label, "#315b76") { setSpeed(v); sync() }
-                      chips.add(v to b)
-                      row.addView(b, LinearLayout.LayoutParams(0, dp(40), 1f).apply { marginEnd = dp(3) })
-                  }
-                  root.addView(row, LinearLayout.LayoutParams(-1, dp(40)))
-
-                  // إعادة وإغلاق
-                  val bottom = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-                  bottom.addView(panelButton("إعادة 1.0×", "#187a9f") { setSpeed(1.0f); sync() },
-                      LinearLayout.LayoutParams(0, dp(42), 1f).apply { marginEnd = dp(6) })
-                  bottom.addView(panelButton("إغلاق", "#344f63") { hideSpeedPanel() },
-                      LinearLayout.LayoutParams(0, dp(42), 1f))
-                  root.addView(bottom, LinearLayout.LayoutParams(-1, dp(42)).apply { topMargin = dp(8) })
-
-                  sync()
-                  speedPanel = root
-
-                  val bp = bubble?.lp
-                  val screenW = resources.displayMetrics.widthPixels
-                  val screenH = resources.displayMetrics.heightPixels
-                  val params = WindowManager.LayoutParams(
-                      dp(290), WindowManager.LayoutParams.WRAP_CONTENT,
-                      WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-                      WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                          WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
-                      PixelFormat.TRANSLUCENT
-                  )
-                  params.gravity = Gravity.TOP or Gravity.START
-                  params.x = ((bp?.x ?: (screenW - dp(170))) - dp(135)).coerceIn(dp(4), screenW - dp(294))
-                  params.y = ((bp?.y ?: dp(150)) + dp(155)).coerceAtMost(screenH - dp(260)).coerceAtLeast(dp(4))
-                  try { wm.addView(root, params) } catch (_: Exception) { speedPanel = null }
-              }
-
-              fun pos(): Int = try { if (ready) mp?.currentPosition ?: 0 else 0 } catch (_: Exception) { 0 }
-              fun dur(): Int = try { if (ready) mp?.duration ?: 0 else 0 } catch (_: Exception) { 0 }
-              fun playing(): Boolean = try { ready && (mp?.isPlaying ?: false) } catch (_: Exception) { false }
-
-              fun toggle() {
-                  if (!ready) return
-                  try {
-                      val m = mp ?: return
-                      if (m.isPlaying) m.pause() else m.start()
-                  } catch (_: Exception) {}
-                  bubble?.invalidate()
-              }
-
-              fun seekBy(ms: Int) = seekTo(pos() + ms)
-
-              fun seekTo(ms: Int) {
-                  if (!ready) return
-                  try { mp?.seekTo(ms.coerceIn(0, dur())) } catch (_: Exception) {}
-                  bubble?.invalidate()
-              }
-
-              fun setA() {
-                  if (!ready) return
-                  markA = pos()
-                  markB = -1
-                  loopA = -1
-                  loopB = -1
-                  Toast.makeText(this, "تم تحديد A عند ${fmt(markA)}", Toast.LENGTH_SHORT).show()
-                  bubble?.invalidate()
-              }
-
-              fun setB() {
-                  if (!ready) return
-                  if (markA < 0) {
-                      Toast.makeText(this, "حدّد A أولًا", Toast.LENGTH_SHORT).show()
-                      return
-                  }
-                  val b = pos()
-                  if (b <= markA + 100) {
-                      Toast.makeText(this, "يجب أن تكون B بعد A", Toast.LENGTH_SHORT).show()
-                      return
-                  }
-                  markB = b
-                  loopA = markA
-                  loopB = markB
-                  seekTo(loopA)
-                  if (!playing()) {
-                      try { mp?.start() } catch (_: Exception) {}
-                  }
-                  Toast.makeText(this, "بدأ التكرار بين A وB", Toast.LENGTH_SHORT).show()
-                  bubble?.invalidate()
-              }
-
-              fun cancelAB(showMessage: Boolean = true) {
-                  val active = loopA >= 0
-                  loopA = -1
-                  loopB = -1
-                  markA = -1
-                  markB = -1
-                  if (showMessage && active) {
-                      Toast.makeText(
-                          this, "أُلغي A-B، يستمر التشغيل العادي", Toast.LENGTH_SHORT
-                      ).show()
-                  }
-                  bubble?.invalidate()
-              }
-
-
-              fun appendTracks(items: JSONArray) {
-                  val wasEmpty = queue.length() == 0
-                  for (i in 0 until items.length()) {
-                      val item = items.optJSONObject(i) ?: continue
-                      queue.put(JSONObject().put("uri", item.optString("uri"))
-                          .put("name", item.optString("name", "صوتية")))
-                  }
-                  Toast.makeText(this, "أُضيفت ${items.length()} صوتية إلى قائمة التشغيل", Toast.LENGTH_SHORT).show()
-                  if (wasEmpty && queue.length() > 0) playAt(0, 0)
-                  refreshPlaylistPanel()
-                  bubble?.invalidate()
-              }
-
-              fun moveTrack(from: Int, to: Int) {
-                  if (from !in 0 until queue.length() || to !in 0 until queue.length()) return
-                  if (from == to) return
-                  val arr = ArrayList<JSONObject>()
-                  for (i in 0 until queue.length()) arr.add(queue.getJSONObject(i))
-                  val item = arr.removeAt(from)
-                  arr.add(to, item)
-                  queue = JSONArray()
-                  arr.forEach { queue.put(it) }
-                  idx = when {
-                      idx == from -> to
-                      from < idx && to >= idx -> idx - 1
-                      from > idx && to <= idx -> idx + 1
-                      else -> idx
-                  }
-                  refreshPlaylistPanel()
-                  bubble?.invalidate()
-              }
-
-              fun removeTrack(at: Int) {
-                  if (at !in 0 until queue.length()) return
-                  val removingCurrent = at == idx
-                  val arr = ArrayList<JSONObject>()
-                  for (i in 0 until queue.length()) if (i != at) arr.add(queue.getJSONObject(i))
-                  queue = JSONArray()
-                  arr.forEach { queue.put(it) }
-                  if (queue.length() == 0) {
-                      idx = 0
-                      try { mp?.release() } catch (_: Exception) {}
-                      mp = null
-                      ready = false
-                      curUri = ""
-                      curName = ""
-                      cancelAB(false)
-                      refreshPlaylistPanel()
-                      bubble?.invalidate()
-                      return
-                  }
-                  if (removingCurrent) {
-                      idx = at.coerceAtMost(queue.length() - 1)
-                      playAt(idx, 0)
-                  } else {
-                      if (at < idx) idx--
-                      refreshPlaylistPanel()
-                  }
-                  bubble?.invalidate()
-              }
-
-              fun requestAddTrack() {
-                  hidePlaylistPanel()
-                  try {
-                      val i = Intent(this, MainActivity::class.java)
-                      i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                      i.putExtra("pickForQueue", true)
-                      startActivity(i)
-                  } catch (_: Exception) {
-                      Toast.makeText(this, "افتح التطبيق لإضافة صوتية", Toast.LENGTH_SHORT).show()
-                  }
-              }
-
-              fun showPlaylistPanel() {
-                  if (queue.length() == 0) {
-                      hidePlaylistPanel()
-                      Toast.makeText(this, "قائمة التشغيل فارغة", Toast.LENGTH_SHORT).show()
-                      return
-                  }
-                  hideSpeedPanel()
-                  val root = LinearLayout(this)
-                  root.orientation = LinearLayout.VERTICAL
-                  root.setPadding(dp(12), dp(10), dp(12), dp(10))
-                  root.background = GradientDrawable().apply {
-                      setColor(Color.rgb(14, 34, 51))
-                      cornerRadius = dp(20).toFloat()
-                      setStroke(dp(1), Color.rgb(76, 194, 232))
-                  }
-                  val title = TextView(this).apply {
-                      text = "قائمة التشغيل  •  ${queue.length()} ملفات"
-                      setTextColor(Color.WHITE)
-                      textSize = 16f
-                      typeface = Typeface.DEFAULT_BOLD
-                      gravity = Gravity.CENTER_VERTICAL
-                      setPadding(dp(4), 0, dp(4), dp(8))
-                  }
-                  root.addView(title, LinearLayout.LayoutParams(-1, dp(36)))
-                  val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-                  val add = panelButton("＋ إضافة", "#187a9f") { requestAddTrack() }
-                  val close = panelButton("إغلاق", "#344f63") { hidePlaylistPanel() }
-                  actions.addView(add, LinearLayout.LayoutParams(0, dp(42), 1f).apply { marginEnd = dp(6) })
-                  actions.addView(close, LinearLayout.LayoutParams(0, dp(42), 1f))
-                  root.addView(actions, LinearLayout.LayoutParams(-1, dp(42)).apply { bottomMargin = dp(8) })
-                  val scroll = ScrollView(this)
-                  val list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-                  for (i in 0 until queue.length()) {
-                      val item = queue.optJSONObject(i) ?: continue
-                      val row = LinearLayout(this).apply {
-                          orientation = LinearLayout.HORIZONTAL
-                          gravity = Gravity.CENTER_VERTICAL
-                          setPadding(dp(6), dp(4), dp(6), dp(4))
-                          background = GradientDrawable().apply {
-                              setColor(if (i == idx) Color.rgb(35, 91, 119) else Color.rgb(21, 50, 74))
-                              cornerRadius = dp(12).toFloat()
-                          }
-                      }
-                      val label = TextView(this).apply {
-                          text = (if (i == idx) "▶  " else "") + (i + 1) + ". " + item.optString("name", "صوتية")
-                          setTextColor(Color.WHITE)
-                          textSize = 12f
-                          maxLines = 2
-                          gravity = Gravity.CENTER_VERTICAL
-                          setPadding(dp(4), 0, dp(4), 0)
-                      }
-                      row.addView(label, LinearLayout.LayoutParams(0, dp(48), 1f))
-                      row.addView(panelButton("↑", "#315b76") { moveTrack(i, i - 1) }, LinearLayout.LayoutParams(dp(34), dp(38)).apply { marginStart = dp(3) })
-                      row.addView(panelButton("↓", "#315b76") { moveTrack(i, i + 1) }, LinearLayout.LayoutParams(dp(34), dp(38)).apply { marginStart = dp(3) })
-                      row.addView(panelButton("×", "#9d3c45") { removeTrack(i) }, LinearLayout.LayoutParams(dp(34), dp(38)).apply { marginStart = dp(3) })
-                      list.addView(row, LinearLayout.LayoutParams(-1, dp(56)).apply { bottomMargin = dp(5) })
-                  }
-                  scroll.addView(list)
-                  root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
-                  hidePlaylistPanel()
-                  playlistPanel = root
-                  val bp = bubble?.lp
-                  val screenW = resources.displayMetrics.widthPixels
-                  val params = WindowManager.LayoutParams(
-                      dp(300), dp(380),
-                      WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-                      WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
-                      PixelFormat.TRANSLUCENT
-                  )
-                  params.gravity = Gravity.TOP or Gravity.START
-                  params.x = ((bp?.x ?: (screenW - dp(170))) - dp(145)).coerceAtLeast(dp(4))
-                  params.y = (((bp?.y ?: dp(150)) + dp(145)).coerceAtMost(resources.displayMetrics.heightPixels - dp(390))).coerceAtLeast(dp(4))
-                  try { wm.addView(root, params) } catch (_: Exception) { playlistPanel = null }
-              }
-
-              private fun panelButton(text: String, color: String, action: () -> Unit): Button =
-                  Button(this).apply {
-                      this.text = text
-                      textSize = 11f
-                      isAllCaps = false
-                      setTextColor(Color.WHITE)
-                      background = GradientDrawable().apply {
-                          setColor(Color.parseColor(color))
-                          cornerRadius = dp(10).toFloat()
-                      }
-                      setPadding(dp(2), 0, dp(2), 0)
-                      setOnClickListener { action() }
-                  }
-
-              fun hidePlaylistPanel() {
-                  playlistPanel?.let { try { wm.removeView(it) } catch (_: Exception) {} }
-                  playlistPanel = null
-              }
-
-              private fun refreshPlaylistPanel() {
-                  if (playlistPanel != null) showPlaylistPanel()
-              }
-
-              fun stateJson(): String = try {
-                  JSONObject()
-                      .put("uri", curUri)
-                      .put("playing", playing())
-                      .put("pos", pos())
-                      .put("dur", dur())
-                      .put("loopA", loopA)
-                      .put("loopB", loopB)
-                      .toString()
-              } catch (_: Exception) { "{}" }
-
-              fun dp(x: Int): Int = (x * resources.displayMetrics.density).toInt()
-
-              private fun ensureBubble() {
-                  if (bubble != null) return
-                  val v = BubbleView(this, this)
-                  val p = WindowManager.LayoutParams(
-                      dp(150), dp(150),
-                      WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-                      WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
-                      PixelFormat.TRANSLUCENT
-                  )
-                  p.gravity = Gravity.TOP or Gravity.START
-                  p.x = resources.displayMetrics.widthPixels - dp(170)
-                  p.y = dp(150)
-                  v.lp = p
-                  wm.addView(v, p)
-                  bubble = v
-              }
-
-              fun closeAll() {
-                  hideSpeedPanel()
-                  hidePlaylistPanel()
-                  bubble?.let { try { wm.removeView(it) } catch (_: Exception) {} }
-                  bubble = null
-                  h.removeCallbacksAndMessages(null)
-                  try { mp?.release() } catch (_: Exception) {}
-                  mp = null
-                  ready = false
-                  curUri = ""
-                  stopForeground(STOP_FOREGROUND_REMOVE)
-                  stopSelf()
-              }
+              private var ready=false
+              private var bubble: TextView?=null
+              private var panel: View?=null
+              private var panelKind=""
+              private var queue=JSONArray()
+              private var idx=0
+              private var curUri=""
+              private var curName=""
+              private var speed=1f
+              private var loopA=-1
+              private var loopB=-1
+              private val h=Handler(Looper.getMainLooper())
+              private val tick=object:Runnable { override fun run(){ try { if(ready && mp?.isPlaying==true && loopA>=0 && loopB>loopA && (mp?.currentPosition?:0)>=loopB) mp?.seekTo(loopA); bubble?.text=if(ready && mp?.isPlaying==true) "Ⅱ" else "▶" } catch (_:Exception){}; h.postDelayed(this,250) } }
+              override fun onBind(intent: Intent?): IBinder?=null
+              override fun onCreate(){ super.onCreate(); inst=this; wm=getSystemService(WINDOW_SERVICE) as WindowManager; val nm=getSystemService(NOTIFICATION_SERVICE) as NotificationManager; nm.createNotificationChannel(NotificationChannel("player","مشغّل الدراسة",NotificationManager.IMPORTANCE_LOW)); h.post(tick) }
+              private fun notification(title:String)=Notification.Builder(this,"player").setSmallIcon(android.R.drawable.ic_media_play).setContentTitle(title).setContentText("مشغّل الدراسة يعمل").setOngoing(true).build()
+              override fun onStartCommand(intent:Intent?,flags:Int,startId:Int):Int { startForeground(1,notification(curName.ifEmpty { "مشغّل الدراسة" })); if(intent?.hasExtra("queue")==true){ queue=JSONArray(intent.getStringExtra("queue")); playAt(intent.getIntExtra("idx",0),intent.getIntExtra("pos",0)) }; return START_NOT_STICKY }
+              private fun playAt(index:Int, position:Int){ if(index !in 0 until queue.length()) return; idx=index; val item=queue.getJSONObject(index); curUri=item.optString("uri"); curName=item.optString("name","صوتية"); loopA=-1; loopB=-1; ready=false; try{mp?.release()}catch(_:Exception){}; val player=MediaPlayer(); mp=player; try{ player.setDataSource(this,Uri.parse(curUri)); player.setOnPreparedListener { p -> ready=true; try{p.playbackParams=p.playbackParams.setSpeed(speed)}catch(_:Exception){}; if(position>0)p.seekTo(position.coerceAtMost(p.duration)); p.start(); bubble?.text="Ⅱ" }; player.setOnCompletionListener { if(idx+1<queue.length()) playAt(idx+1,0) else stopTrack() }; player.setOnErrorListener { _,_,_-> ready=false; true }; player.prepareAsync() }catch(_:Exception){ ready=false; Toast.makeText(this,"تعذّر تشغيل الملف",Toast.LENGTH_SHORT).show() }; (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).notify(1,notification(curName)); ensureBubble() }
+              private fun ensureBubble(){ if(bubble!=null)return; val b=TextView(this).apply{ text="▶"; textSize=24f; gravity=Gravity.CENTER; setTextColor(Color.WHITE); background=GradientDrawable().apply{shape=GradientDrawable.OVAL;setColor(Color.rgb(101,86,217));setStroke(dp(2),Color.rgb(102,227,207))}; setOnClickListener{toggle()}; setOnLongClickListener{showPanel("main");true} }; val p=WindowManager.LayoutParams(dp(62),dp(62),WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,PixelFormat.TRANSLUCENT); p.gravity=Gravity.TOP or Gravity.START;p.x=resources.displayMetrics.widthPixels-dp(82);p.y=dp(180); var dx=0f;var dy=0f;var sx=0;var sy=0; b.setOnTouchListener { v,e -> when(e.action){MotionEvent.ACTION_DOWN->{dx=e.rawX;dy=e.rawY;sx=p.x;sy=p.y;true};MotionEvent.ACTION_MOVE->{val mx=e.rawX-dx;val my=e.rawY-dy;if(kotlin.math.abs(mx)>8||kotlin.math.abs(my)>8){p.x=sx+mx.toInt();p.y=sy+my.toInt();try{wm.updateViewLayout(v,p)}catch(_:Exception){}};true};MotionEvent.ACTION_UP->{if(kotlin.math.abs(e.rawX-dx)<8&&kotlin.math.abs(e.rawY-dy)<8){if(e.eventTime-e.downTime>500) showPanel("main") else toggle()};true};else->true} }; wm.addView(b,p);bubble=b }
+              private fun dp(v:Int)=(v*resources.displayMetrics.density).toInt()
+              fun toggle(){ if(!ready){if(curUri.isNotEmpty())playAt(idx,0);return};try{if(mp?.isPlaying==true)mp?.pause() else mp?.start()}catch(_:Exception){};bubble?.text=if(mp?.isPlaying==true)"Ⅱ" else "▶" }
+              fun stopTrack(){ try{mp?.stop()}catch(_:Exception){};try{mp?.release()}catch(_:Exception){};mp=null;ready=false;loopA=-1;loopB=-1;bubble?.text="▶"; (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).notify(1,notification("تم إيقاف الصوتية")) }
+              fun nextTrack(){if(idx+1<queue.length())playAt(idx+1,0)else stopTrack()}
+              fun previousTrack(){if(ready&&(mp?.currentPosition?:0)>3000)seekTo(0)else if(idx>0)playAt(idx-1,0)else seekTo(0)}
+              fun seekTo(ms:Int){if(ready)try{mp?.seekTo(ms.coerceIn(0,mp?.duration?:0))}catch(_:Exception){}}
+              fun setSpeed(v:Float){speed=(kotlin.math.round(v*20)/20f).coerceIn(0.5f,3f);if(ready)try{mp?.playbackParams=mp!!.playbackParams.setSpeed(speed)}catch(_:Exception){} }
+              private fun pos()=try{if(ready)mp?.currentPosition?:0 else 0}catch(_:Exception){0}
+              private fun dur()=try{if(ready)mp?.duration?:0 else 0}catch(_:Exception){0}
+              fun stateJson()=JSONObject().put("uri",curUri).put("name",curName).put("playing",ready&&(mp?.isPlaying==true)).put("pos",pos()).put("dur",dur()).put("speed",speed).toString()
+              private fun btn(text:String, action:()->Unit)=Button(this).apply{this.text=text;isAllCaps=false;setTextColor(Color.WHITE);background=GradientDrawable().apply{setColor(Color.rgb(38,59,87));cornerRadius=dp(12).toFloat()};setOnClickListener{action()} }
+              private fun showPanel(kind:String){ hidePanel();panelKind=kind;val root=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(dp(14),dp(12),dp(14),dp(12));background=GradientDrawable().apply{setColor(Color.rgb(17,30,50));cornerRadius=dp(20).toFloat();setStroke(dp(1),Color.rgb(102,227,207))} }; val title=TextView(this).apply{text=if(kind=="speed")"سرعة التشغيل" else "التحكم بالصوتية";textSize=18f;typeface=Typeface.DEFAULT_BOLD;setTextColor(Color.WHITE);gravity=Gravity.CENTER;setPadding(0,0,0,dp(8))};root.addView(title);if(kind=="speed"){ for(v in listOf(0.5f,0.75f,1f,1.25f,1.5f,2f,2.5f,3f)) root.addView(btn("${v}×"){setSpeed(v);hidePanel()}) }else{root.addView(btn("▶ / إيقاف مؤقت"){toggle()});root.addView(btn("⏮ السابق"){previousTrack()});root.addView(btn("⏭ التالي"){nextTrack()});root.addView(btn("■ إيقاف نهائي"){stopTrack()});root.addView(btn("سرعة التشغيل ${speed}×"){showPanel("speed")});root.addView(btn("إغلاق المشغّل العائم"){closeAll()})};root.addView(btn("إغلاق"){hidePanel()});root.setOnTouchListener { _,e -> if(e.action==MotionEvent.ACTION_OUTSIDE){hidePanel();true}else false };val p=WindowManager.LayoutParams(dp(260),WindowManager.LayoutParams.WRAP_CONTENT,WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,PixelFormat.TRANSLUCENT);p.gravity=Gravity.TOP or Gravity.START;p.x=(resources.displayMetrics.widthPixels-dp(280)).coerceAtLeast(dp(4));p.y=dp(160);panel=root;try{wm.addView(root,p)}catch(_:Exception){panel=null} }
+              private fun hidePanel(){panel?.let{try{wm.removeView(it)}catch(_:Exception){}};panel=null;panelKind=""}
+              private fun closeAll(){hidePanel();bubble?.let{try{wm.removeView(it)}catch(_:Exception){}};bubble=null;stopTrack();stopForeground(STOP_FOREGROUND_REMOVE);stopSelf()}
+              override fun onDestroy(){hidePanel();h.removeCallbacksAndMessages(null);try{mp?.release()}catch(_:Exception){};bubble?.let{try{wm.removeView(it)}catch(_:Exception){}};bubble=null;inst=null;super.onDestroy()}
           }
+          KOTLIN
 
-          class BubbleView(ctx: Context, private val svc: PlayerService) : View(ctx) {
-              var lp: WindowManager.LayoutParams? = null
-              private val d = ctx.resources.displayMetrics.density
-              private val sz = 150f * d
-              private val c = sz / 2f
-              private val pt = Paint(Paint.ANTI_ALIAS_FLAG)
-              private var downX = 0f
-              private var downY = 0f
-              private var sx = 0
-              private var sy = 0
-              private var zone = 0
-              private var moved = false
-              private var scrub = false
-              private var scrubFrac = 0f
-              private var scrubLastAngle = 0f
-
-              override fun onMeasure(w: Int, h: Int) {
-                  setMeasuredDimension(sz.toInt(), sz.toInt())
-              }
-
-              private fun mark(cv: Canvas, ms: Int, duration: Int, color: String) {
-                  if (duration <= 0) return
-                  val a = Math.toRadians(-90.0 + 360.0 * ms.toDouble() / duration)
-                  pt.color = Color.parseColor(color)
-                  cv.drawCircle(
-                      c + 61 * d * Math.cos(a).toFloat(),
-                      c + 61 * d * Math.sin(a).toFloat(),
-                      5 * d, pt
-                  )
-              }
-
-              private fun button(cv: Canvas, x: Float, y: Float, label: String, color: String) {
-                  pt.style = Paint.Style.FILL
-                  pt.color = Color.parseColor(color)
-                  cv.drawRoundRect(
-                      RectF(x - 15*d, y - 11*d, x + 15*d, y + 11*d),
-                      7*d, 7*d, pt
-                  )
-                  pt.color = Color.WHITE
-                  pt.textAlign = Paint.Align.CENTER
-                  pt.typeface = Typeface.DEFAULT_BOLD
-                  pt.textSize = 11*d
-                  cv.drawText(label, x, y + 4*d, pt)
-              }
-
-              override fun onDraw(cv: Canvas) {
-                  super.onDraw(cv)
-                  val duration = svc.dur()
-                  val real = if (duration > 0) svc.pos().toFloat() / duration else 0f
-                  val frac = if (scrub) scrubFrac else real
-
-                  pt.style = Paint.Style.STROKE
-                  pt.strokeWidth = 4*d
-                  pt.color = Color.parseColor("#3b5d78")
-                  cv.drawCircle(c, c, 61*d, pt)
-
-                  pt.strokeWidth = 3*d
-                  pt.color = Color.parseColor("#7fb4d4")
-                  cv.drawArc(
-                      RectF(c-61*d, c-61*d, c+61*d, c+61*d),
-                      -90f, 360f*frac, false, pt
-                  )
-                  pt.style = Paint.Style.FILL
-
-                  if (duration > 0) {
-                      if (svc.markA >= 0) mark(cv, svc.markA, duration, "#ff4fa3")
-                      if (svc.markB >= 0) mark(cv, svc.markB, duration, "#ffd23f")
-                  }
-
-                  val angle = Math.toRadians(-90.0 + 360.0*frac)
-                  pt.color = Color.WHITE
-                  cv.drawCircle(
-                      c + 61*d*Math.cos(angle).toFloat(),
-                      c + 61*d*Math.sin(angle).toFloat(),
-                      5*d, pt
-                  )
-
-                  pt.color = Color.parseColor("#1e6a8f")
-                  cv.drawCircle(c, c, 44*d, pt)
-                  pt.style = Paint.Style.STROKE
-                  pt.strokeWidth = 3*d
-                  pt.color = Color.parseColor("#4a9cc4")
-                  cv.drawCircle(c, c, 44*d, pt)
-                  pt.style = Paint.Style.FILL
-                  pt.color = Color.parseColor("#e5473f")
-                  cv.drawCircle(c, c, 21*d, pt)
-                  pt.color = Color.WHITE
-
-                  if (svc.playing()) {
-                      cv.drawRect(c-7*d, c-9*d, c-2*d, c+9*d, pt)
-                      cv.drawRect(c+3*d, c-9*d, c+8*d, c+9*d, pt)
-                  } else {
-                      val path = Path()
-                      path.moveTo(c-5*d, c-10*d)
-                      path.lineTo(c-5*d, c+10*d)
-                      path.lineTo(c+11*d, c)
-                      path.close()
-                      cv.drawPath(path, pt)
-                  }
-
-                  pt.color = Color.WHITE
-                  pt.textAlign = Paint.Align.CENTER
-                  pt.typeface = Typeface.DEFAULT_BOLD
-                  pt.textSize = 19*d
-                  cv.drawText("«", c-32*d, c+3*d, pt)
-                  cv.drawText("»", c+32*d, c+3*d, pt)
-                  pt.textSize = 10*d
-                  cv.drawText("15", c-32*d, c+17*d, pt)
-                  cv.drawText("15", c+32*d, c+17*d, pt)
-
-                  if (scrub && duration > 0) {
-                      pt.textSize = 12*d
-                      cv.drawText(fmt((scrubFrac*duration).toInt()), c, c-28*d, pt)
-                  }
-
-                  pt.color = Color.parseColor("#0e2233")
-                  cv.drawCircle(15*d, 15*d, 11*d, pt)
-                  pt.color = Color.WHITE
-                  pt.textSize = 13*d
-                  cv.drawText("≡", 15*d, 19*d, pt)
-
-                  pt.color = Color.parseColor("#0e2233")
-                  cv.drawCircle(sz-15*d, 15*d, 11*d, pt)
-                  pt.color = Color.WHITE
-                  pt.textSize = 13*d
-                  cv.drawText("×", sz-15*d, 19*d, pt)
-
-                  pt.color = Color.parseColor("#187a9f")
-                  cv.drawRoundRect(RectF(c-26*d, 4*d, c+26*d, 26*d), 7*d, 7*d, pt)
-                  pt.color = Color.WHITE
-                  pt.textSize = 10*d
-                  pt.typeface = Typeface.DEFAULT_BOLD
-                  cv.drawText("${svc.playbackSpeedLabel()}", c, 18*d, pt)
-
-                  val by = sz - 20*d
-                  button(cv, c-37*d, by, "A", if (svc.markA >= 0) "#d63384" else "#31516b")
-                  button(cv, c, by, "B", if (svc.loopB >= 0) "#c58b00" else "#31516b")
-                  button(cv, c+37*d, by, "×", if (svc.loopA >= 0) "#c0392b" else "#31516b")
-
-                  if (svc.loopA >= 0 && svc.loopB > svc.loopA) {
-                      pt.color = Color.parseColor("#ffd23f")
-                      pt.textSize = 10*d
-                      cv.drawText("A-B", c, c-29*d, pt)
-                  }
-              }
-
-              private fun angleAt(x: Float, y: Float): Float {
-                  var deg = Math.toDegrees(
-                      Math.atan2((y-c).toDouble(), (x-c).toDouble())
-                  ).toFloat() + 90f
-                  if (deg < 0f) deg += 360f
-                  if (deg >= 360f) deg -= 360f
-                  return deg
-              }
-
-              private fun hit(x: Float, y: Float): Int {
-                  fun dist(ax: Float, ay: Float): Float =
-                      Math.hypot((x-ax).toDouble(), (y-ay).toDouble()).toFloat()
-
-                  if (dist(sz-15*d, 15*d) < 17*d) return 4
-                  if (dist(15*d, 15*d) < 17*d) return 5
-                  if (dist(c, 15*d) < 25*d) return 10
-                  val by = sz-20*d
-                  if (dist(c-37*d, by) < 18*d) return 7
-                  if (dist(c, by) < 18*d) return 8
-                  if (dist(c+37*d, by) < 18*d) return 9
-                  if (dist(c, c) < 24*d) return 1
-
-                  if (y > c-28*d && y < c+28*d) {
-                      if (x > c-45*d && x < c-22*d) return 2
-                      if (x > c+22*d && x < c+45*d) return 3
-                  }
-
-                  val r = dist(c, c)
-                  if (r > 47*d && r < 73*d && svc.dur() > 0) return 6
-                  return 0
-              }
-
-              override fun onTouchEvent(e: MotionEvent): Boolean {
-                  when (e.actionMasked) {
-                      MotionEvent.ACTION_DOWN -> {
-                          downX = e.rawX
-                          downY = e.rawY
-                          sx = lp?.x ?: 0
-                          sy = lp?.y ?: 0
-                          zone = hit(e.x, e.y)
-                          moved = false
-                          scrub = zone == 6
-                          if (scrub) {
-                              scrubLastAngle = angleAt(e.x, e.y)
-                              scrubFrac = scrubLastAngle / 360f
-                          }
-                          invalidate()
-                          return true
-                      }
-
-                      MotionEvent.ACTION_MOVE -> {
-                          if (scrub) {
-                              val nowAngle = angleAt(e.x, e.y)
-                              var delta = nowAngle - scrubLastAngle
-                              if (delta > 180f) delta -= 360f
-                              if (delta < -180f) delta += 360f
-                              scrubFrac = (scrubFrac + delta / 360f).coerceIn(0f, 1f)
-                              scrubLastAngle = nowAngle
-                              invalidate()
-                          } else {
-                              val dx = e.rawX-downX
-                              val dy = e.rawY-downY
-                              if (!moved && Math.hypot(dx.toDouble(), dy.toDouble()) > 12*d) {
-                                  moved = true
-                              }
-                              if (moved) {
-                                  val p = lp
-                                  if (p != null) {
-                                      p.x = sx+dx.toInt()
-                                      p.y = sy+dy.toInt()
-                                      try { svc.wm.updateViewLayout(this, p) } catch (_: Exception) {}
-                                  }
-                              }
-                          }
-                      }
-
-                      MotionEvent.ACTION_UP -> {
-                          if (scrub) {
-                              svc.seekTo((scrubFrac*svc.dur()).toInt())
-                              scrub = false
-                          } else if (!moved) {
-                              when (zone) {
-                                  1 -> svc.toggle()
-                                  2 -> svc.seekBy(-15000)
-                                  3 -> svc.seekBy(15000)
-                                  4 -> svc.closeAll()
-                                  5 -> svc.showPlaylistPanel()
-                                  7 -> svc.setA()
-                                  8 -> svc.setB()
-                                  9 -> svc.cancelAB()
-                                  10 -> svc.showSpeedPicker()
-                              }
-                          }
-                          invalidate()
-                      }
-
-                      MotionEvent.ACTION_CANCEL -> {
-                          scrub = false
-                          invalidate()
-                      }
-                  }
-                  return true
-              }
-          }
-          EOF
-
-          cat > app/src/main/assets/index.html <<'EOF'
-          <!DOCTYPE html>
-          <html lang="ar" dir="rtl">
-          <head>
-          <meta charset="utf-8">
-          <meta name="viewport" content="width=device-width,initial-scale=1">
-          <style>
-          :root{--bg:#0e2233;--card:#15324a;--tx:#eef6fb;--mu:#8fb0c7;--b:#4cc2e8;--c:#e5473f}
-          *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-          body{margin:0;padding:16px 14px 60px;background:var(--bg);color:var(--tx);font-family:sans-serif}
-          h1{font-size:20px;margin:4px 0 12px;color:var(--b)}
-          h3{margin:16px 4px 6px}
-          .btn{display:block;width:100%;border:0;border-radius:14px;padding:13px;margin:6px 0;font:inherit;font-weight:700;color:#fff;background:linear-gradient(135deg,#1f7aa6,var(--c))}
-          .btn.s{background:var(--card);border:1px solid #4cc2e855}
-          .card{display:flex;align-items:center;gap:10px;background:var(--card);border-radius:18px;padding:12px 14px;margin:8px 0}
-          .card .t{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-          .card small{display:block;color:var(--mu)}
-          .ic{border:0;border-radius:12px;width:40px;height:40px;font-size:17px;background:#e5473f33;color:var(--tx);flex-shrink:0}
-          .ic.rename{background:#4cc2e833}
-          .cur{outline:2px solid var(--b)}
-          .note{color:var(--mu);font-size:13px;padding:6px 4px}
-          </style>
-          </head>
-          <body>
-          <h1>🎧 مشغّل الدراسة</h1>
-          <div id="app"></div>
-          <script>
-          let S;
-          try { S = JSON.parse(localStorage.getItem('st') || 'null'); } catch (e) { S = null; }
-          if (!S) S = {lists:[],last:null,open:null};
-          S.open = null;
-          let target = null;
-          const save = () => { try { localStorage.setItem('st',JSON.stringify(S)); } catch(e){} };
-          const uid = () => Math.random().toString(36).slice(2,9);
-          const L = id => S.lists.find(l => l.id == id);
-          const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-          const fmt = ms => Math.floor(ms/60000)+':'+String(Math.floor(ms/1000)%60).padStart(2,'0');
-
-          function addNew(){target=null;Android.pick();}
-          function addTo(id){target=id;Android.pick();}
-          function onPicked(a){
-            if(!a.length)return;
-            const tr=a.map(x=>({id:uid(),name:x.name,uri:x.uri}));
-            if(target&&L(target))L(target).tracks.push(...tr);
-            else S.lists.push({id:uid(),name:a.length>1?'قائمة '+(S.lists.length+1):tr[0].name,tracks:tr});
-            save();render();
-          }
-          function play(lid,tid,pos){
-            const l=L(lid);if(!l)return;
-            const i=l.tracks.findIndex(t=>t.id==tid);if(i<0)return;
-            S.last={l:lid,t:tid,pos:pos||0};save();
-            Android.play(JSON.stringify(l.tracks.map(t=>({uri:t.uri,name:t.name}))),i,pos||0);
-            render();
-          }
-          function tap(lid,tid){play(lid,tid,S.last&&S.last.t==tid?S.last.pos:0);}
-          function resume(){const x=S.last;if(x&&L(x.l))play(x.l,x.t,x.pos);}
-          function openL(id){S.open=id;render();}
-          function renameL(id){
-            const l=L(id);if(!l)return;
-            const n=prompt('اكتب الاسم الجديد لقائمة التشغيل:',l.name);
-            if(n===null)return;
-            const v=n.trim();
-            if(!v){alert('اكتب اسمًا غير فارغ.');return;}
-            l.name=v;save();render();
-          }
-          function delL(id){
-            if(!confirm('حذف القائمة؟'))return;
-            S.lists=S.lists.filter(l=>l.id!=id);save();render();
-          }
-          function delT(lid,tid){
-            const l=L(lid);if(!l)return;
-            l.tracks=l.tracks.filter(t=>t.id!=tid);save();render();
-          }
-          function goBack(){
-            if(S.open){S.open=null;render();return false;}
-            return true;
-          }
-          function render(){
-            const a=document.getElementById('app');
-            if(!S.open){
-              const x=S.last&&L(S.last.l);
-              a.innerHTML='<button class="btn" onclick="addNew()">＋ إضافة صوتية / قائمة جديدة</button>'+
-                (x?`<button class="btn s" onclick="resume()">▶ متابعة آخر صوتية (${fmt(S.last.pos)})</button>`:'')+
-                '<h3>قوائم التشغيل</h3>'+
-                (S.lists.map(l=>`<div class="card${S.last&&S.last.l==l.id?' cur':''}" onclick="openL('${l.id}')"><span style="font-size:24px">📁</span><div class="t">${esc(l.name)}<small>${l.tracks.length} ملف</small></div><button class="ic rename" title="إعادة تسمية" onclick="event.stopPropagation();renameL('${l.id}')">✏️</button><button class="ic" title="حذف القائمة" onclick="event.stopPropagation();delL('${l.id}')">🗑</button></div>`).join('')||'<div class="note">لا توجد قوائم بعد. أضف صوتياتك للبدء.</div>');
-            }else{
-              const l=L(S.open);
-              if(!l){S.open=null;render();return;}
-              a.innerHTML='<button class="btn s" onclick="goBack()">→ رجوع</button>'+
-                `<h3>📁 ${esc(l.name)}</h3>`+
-                `<button class="btn s" onclick="renameL('${l.id}')">✏️ إعادة تسمية قائمة التشغيل</button>`+
-                `<button class="btn" onclick="addTo('${l.id}')">＋ إضافة ملفات للقائمة</button>`+
-                (l.tracks.map(t=>`<div class="card${S.last&&S.last.t==t.id?' cur':''}" onclick="tap('${l.id}','${t.id}')"><span style="font-size:22px">🎵</span><div class="t">${esc(t.name)}</div><button class="ic" onclick="event.stopPropagation();delT('${l.id}','${t.id}')">🗑</button></div>`).join('')||'<div class="note">القائمة فارغة.</div>');
-            }
-          }
-          setInterval(()=>{
-            try{
-              const s=JSON.parse(Android.state());if(!s.uri)return;
-              for(const l of S.lists){
-                const t=l.tracks.find(t=>t.uri==s.uri);
-                if(t){
-                  const ch=!S.last||S.last.t!=t.id;
-                  S.last={l:l.id,t:t.id,pos:s.pos};save();
-                  if(ch)render();
-                  return;
-                }
-              }
-            }catch(e){}
-          },1000);
-          render();
-          </script>
-          </body>
-          </html>
-          EOF
+          cat > app/src/main/assets/index.html <<'HTML'
+          <!doctype html>
+          <html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"><style>
+          :root{--bg:#0b1424;--card:#16243a;--tx:#f4f7ff;--mu:#a5b4cc;--mint:#66e3cf;--violet:#8b7cff;--red:#a83e55}*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}body{margin:0;padding:18px 14px 50px;color:var(--tx);font-family:sans-serif;background:radial-gradient(ellipse at top,#203858 0%,var(--bg) 70%)}h1{font-size:22px;color:var(--mint);margin:5px 0 15px}h3{margin:18px 4px 8px}.btn{width:100%;border:0;border-radius:15px;padding:13px;margin:6px 0;font:inherit;font-weight:bold;color:white;background:linear-gradient(135deg,#238f9c,#6556d9)}.btn.secondary{background:#1a2b43;border:1px solid #66e3cf40}.card{display:flex;align-items:center;gap:10px;background:linear-gradient(135deg,#192b43,#142137);border:1px solid #ffffff0c;border-radius:17px;padding:11px;margin:8px 0}.card .t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.card small{display:block;color:var(--mu);margin-top:4px}.ic{border:0;border-radius:12px;width:39px;height:39px;font-size:16px;background:#8d354833;color:var(--tx);flex-shrink:0}.ic.rename{background:#66e3cf24}.cur{outline:2px solid var(--mint)}.note{color:var(--mu);font-size:13px;padding:6px 4px}.player{background:linear-gradient(145deg,#1c304b,#121e32);border:1px solid #ffffff18;border-radius:23px;padding:16px;margin:12px 0 20px;box-shadow:0 12px 30px #0003}.player-head{display:flex;align-items:center;gap:10px}.player-icon{display:grid;place-items:center;width:46px;height:46px;border-radius:15px;color:#0b1424;background:linear-gradient(135deg,var(--mint),var(--violet));font-size:27px}.player-info{flex:1;min-width:0}.player-info span{display:block;color:var(--mu);font-size:12px;margin-top:5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.status{color:var(--mint);font-size:12px}#audioSeek{width:100%;accent-color:var(--mint);margin:18px 0 0}.times{display:flex;justify-content:space-between;color:var(--mu);font-size:12px}.controls{display:flex;align-items:center;justify-content:center;gap:7px;flex-wrap:wrap;margin-top:14px}.controls button{border:1px solid #ffffff18;border-radius:12px;padding:10px;color:var(--tx);background:#263b57;font:inherit;font-weight:bold}.controls .play{width:49px;height:45px;background:var(--mint);color:#0b1424;font-size:20px}.controls .stop{background:#8d3548;color:#fff0f2}
+          </style></head><body><h1>🎧 مشغّل الدراسة</h1><section class="player"><div class="player-head"><span class="player-icon">♫</span><div class="player-info"><strong>المشغّل الصوتي</strong><span id="nowName">لا توجد صوتية قيد التشغيل</span></div><span id="playState" class="status">متوقف</span></div><input id="audioSeek" type="range" min="0" max="0" value="0"><div class="times"><span id="audioPos">0:00</span><span id="audioDur">0:00</span></div><div class="controls"><button onclick="Android.previous()">⏮</button><button class="play" id="mainPlay" onclick="Android.toggle()">▶</button><button onclick="Android.next()">⏭</button><button class="stop" onclick="Android.stop()">■ إيقاف</button></div><div class="controls"><button onclick="setSpeed()">سرعة التشغيل</button><button onclick="requestOverlay()">تفعيل المشغّل العائم</button></div></section><div id="app"></div><script>
+          let S;try{S=JSON.parse(localStorage.getItem('st')||'null')}catch(e){S=null}if(!S)S={lists:[],last:null,open:null};let target=null,seeking=false;const save=()=>localStorage.setItem('st',JSON.stringify(S));const uid=()=>Math.random().toString(36).slice(2,9);const L=id=>S.lists.find(l=>l.id===id);const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');const fmt=ms=>Math.floor(Math.max(0,ms)/60000)+':'+String(Math.floor(Math.max(0,ms)/1000)%60).padStart(2,'0');
+          function requestOverlay(){Android.requestOverlay()}function setSpeed(){const v=prompt('سرعة التشغيل من 0.5 إلى 3', '1');if(v!==null){const n=Number(v);if(n>=.5&&n<=3)Android.speed(n)}}
+          function onPicked(json){let a;try{a=typeof json==='string'?JSON.parse(json):json}catch(e){return}if(!a||!a.length)return;const tracks=a.map(x=>({id:uid(),name:x.name,uri:x.uri}));if(target&&L(target))L(target).tracks.push(...tracks);else S.lists.push({id:uid(),name:a.length>1?'قائمة '+(S.lists.length+1):tracks[0].name,tracks});target=null;save();render()}
+          function addNew(){target=null;Android.pick()}function addTo(id){target=id;Android.pick()}function play(lid,tid,pos=0){const l=L(lid);if(!l)return;const i=l.tracks.findIndex(t=>t.id===tid);if(i<0)return;S.last={l:lid,t:tid,pos};save();Android.play(JSON.stringify(l.tracks.map(t=>({uri:t.uri,name:t.name}))),i,pos);render()}function resume(){if(S.last)play(S.last.l,S.last.t,S.last.pos||0)}function openL(id){S.open=id;render()}function goBack(){if(S.open){S.open=null;render();return false}return true}
+          function renameL(id){const l=L(id);if(!l)return;const n=prompt('اسم القائمة',l.name);if(n!==null&&n.trim()){l.name=n.trim();save();render()}}function delL(id){if(confirm('حذف قائمة التشغيل؟')){S.lists=S.lists.filter(l=>l.id!==id);save();render()}}function delT(lid,tid){const l=L(lid);if(l){l.tracks=l.tracks.filter(t=>t.id!==tid);save();render()}}
+          function render(){const a=document.getElementById('app');if(!S.open){const x=S.last&&L(S.last.l);a.innerHTML='<button class="btn" onclick="addNew()">＋ إضافة صوتية / قائمة جديدة</button>'+(x?'<button class="btn secondary" onclick="resume()">▶ متابعة آخر صوتية</button>':'')+'<h3>قوائم التشغيل</h3>'+(S.lists.map(l=>`<div class="card${S.last&&S.last.l===l.id?' cur':''}" onclick="openL('${l.id}')"><span style="font-size:24px">📁</span><div class="t">${esc(l.name)}<small>${l.tracks.length} ملف</small></div><button class="ic rename" onclick="event.stopPropagation();renameL('${l.id}')">✏️</button><button class="ic" onclick="event.stopPropagation();delL('${l.id}')">🗑</button></div>`).join('')||'<div class="note">لا توجد قوائم بعد. أضف صوتياتك للبدء.</div>')}';return}const l=L(S.open);if(!l){S.open=null;render();return}a.innerHTML='<button class="btn secondary" onclick="goBack()">→ رجوع</button>'+`<h3>📁 ${esc(l.name)}</h3><button class="btn secondary" onclick="renameL('${l.id}')">✏️ إعادة تسمية</button><button class="btn" onclick="addTo('${l.id}')">＋ إضافة ملفات</button>`+(l.tracks.map(t=>`<div class="card${S.last&&S.last.t===t.id?' cur':''}" onclick="play('${l.id}','${t.id}')"><span style="font-size:22px">🎵</span><div class="t">${esc(t.name)}</div><button class="ic" onclick="event.stopPropagation();delT('${l.id}','${t.id}')">🗑</button></div>`).join('')||'<div class="note">القائمة فارغة.</div>')}
+          document.getElementById('audioSeek').addEventListener('pointerdown',()=>seeking=true);document.getElementById('audioSeek').addEventListener('change',e=>{Android.seekTo(Number(e.target.value));seeking=false});document.getElementById('audioSeek').addEventListener('pointerup',()=>seeking=false);
+          function updatePlayer(s){document.getElementById('nowName').textContent=s.name||'لا توجد صوتية قيد التشغيل';document.getElementById('playState').textContent=s.playing?'قيد التشغيل':(s.uri&&s.dur>0?'متوقف مؤقتًا':'متوقف');document.getElementById('mainPlay').textContent=s.playing?'Ⅱ':'▶';const seek=document.getElementById('audioSeek');seek.max=Math.max(0,s.dur||0);if(!seeking)seek.value=s.pos||0;document.getElementById('audioPos').textContent=fmt(s.pos||0);document.getElementById('audioDur').textContent=fmt(s.dur||0)}
+          setInterval(()=>{try{const s=JSON.parse(Android.state());updatePlayer(s);if(!s.uri)return;for(const l of S.lists){const t=l.tracks.find(t=>t.uri===s.uri);if(t){const changed=!S.last||S.last.t!==t.id;S.last={l:l.id,t:t.id,pos:s.pos};save();if(changed)render();return}}}catch(e){}},500);render();
+          </script></body></html>
+          HTML
 
       - name: Build debug APK
         working-directory: proj
