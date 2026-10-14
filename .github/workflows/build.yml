@@ -37,6 +37,7 @@ jobs:
           mkdir -p proj/app/src/main/res/values
           mkdir -p proj/app/src/main/res/drawable-nodpi
           mkdir -p proj/app/src/main/res/mipmap-anydpi-v26
+          mkdir -p proj/app/src/main/res/xml
           cd proj
 
           cat > settings.gradle <<'EOF'
@@ -106,7 +107,7 @@ jobs:
                   android:roundIcon="@mipmap/ic_launcher_round"
                   android:allowBackup="false"
                   android:supportsRtl="true"
-                  android:theme="@android:style/Theme.Material.Light.NoActionBar">
+                  android:theme="@style/AppTheme">
                   <activity
                       android:name=".MainActivity"
                       android:exported="true"
@@ -120,6 +121,18 @@ jobs:
                       android:name=".PlayerService"
                       android:exported="false"
                       android:foregroundServiceType="mediaPlayback"/>
+                  <service
+                      android:name=".PlayerAccessibilityService"
+                      android:exported="true"
+                      android:label="مشغّل الدراسة"
+                      android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+                      <intent-filter>
+                          <action android:name="android.accessibilityservice.AccessibilityService"/>
+                      </intent-filter>
+                      <meta-data
+                          android:name="android.accessibilityservice"
+                          android:resource="@xml/accessibility_config"/>
+                  </service>
               </application>
           </manifest>
           EOF
@@ -589,6 +602,24 @@ jobs:
           </resources>
           EOF
 
+          cat > app/src/main/res/xml/accessibility_config.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+              android:description="@string/a11y_desc"
+              android:accessibilityEventTypes="typeWindowStateChanged"
+              android:accessibilityFeedbackType="feedbackGeneric"
+              android:accessibilityFlags="flagRequestAccessibilityButton"
+              android:canRetrieveWindowContent="false"
+              android:notificationTimeout="100"/>
+          EOF
+
+          cat > app/src/main/res/values/strings.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <string name="a11y_desc">يتيح إظهار المشغّل العائم وتصغيره بسرعة من زر إمكانية الوصول في شريط التنقل. لا يقرأ التطبيق محتوى الشاشة.</string>
+          </resources>
+          EOF
+
           cat > app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
@@ -608,6 +639,7 @@ jobs:
                   <item name="android:statusBarColor">#0F1835</item>
                   <item name="android:navigationBarColor">#0F1835</item>
                   <item name="android:windowLightStatusBar">false</item>
+                  <item name="android:windowBackground">@color/ic_bg</item>
               </style>
           </resources>
           EOF
@@ -635,6 +667,17 @@ jobs:
 
               override fun onCreate(b: Bundle?) {
                   super.onCreate(b)
+                  val skipAuto = intent?.getBooleanExtra("pickForQueue", false) == true ||
+                      intent?.getBooleanExtra("showLists", false) == true
+                  if (!skipAuto && hasSavedPlayer() && Settings.canDrawOverlays(this)) {
+                      try {
+                          val s = Intent(this, PlayerService::class.java)
+                          s.putExtra("restore", true)
+                          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(s) else startService(s)
+                          finish()
+                          return
+                      } catch (_: Exception) {}
+                  }
                   window.statusBarColor = Color.rgb(15, 24, 53)
                   window.navigationBarColor = Color.rgb(15, 24, 53)
                   web = WebView(this)
@@ -662,6 +705,10 @@ jobs:
                       web.post { openPicker(8) }
                   }
               }
+
+              private fun hasSavedPlayer(): Boolean = try {
+                  JSONArray(getSharedPreferences("fp", MODE_PRIVATE).getString("q", "[]") ?: "[]").length() > 0
+              } catch (_: Exception) { false }
 
               private fun openPicker(requestCode: Int) {
                   val i = Intent(Intent.ACTION_OPEN_DOCUMENT)
@@ -756,7 +803,81 @@ jobs:
                   }
 
                   @JavascriptInterface
+                  fun saveState(s: String) {
+                      getSharedPreferences("fp", MODE_PRIVATE).edit().putString("web", s).apply()
+                  }
+
+                  @JavascriptInterface
+                  fun loadState(): String =
+                      getSharedPreferences("fp", MODE_PRIVATE).getString("web", "") ?: ""
+
+                  @JavascriptInterface
                   fun state(): String = PlayerService.inst?.stateJson() ?: "{}"
+              }
+          }
+          EOF
+
+          cat > app/src/main/java/com/floatplayer/PlayerAccessibilityService.kt <<'EOF'
+          package com.floatplayer
+
+          import android.accessibilityservice.AccessibilityButtonController
+          import android.accessibilityservice.AccessibilityService
+          import android.content.Intent
+          import android.os.Build
+          import android.provider.Settings
+          import android.view.accessibility.AccessibilityEvent
+
+          class PlayerAccessibilityService : AccessibilityService() {
+              private var callback: AccessibilityButtonController.AccessibilityButtonCallback? = null
+
+              override fun onServiceConnected() {
+                  super.onServiceConnected()
+                  val cb = object : AccessibilityButtonController.AccessibilityButtonCallback() {
+                      override fun onClicked(controller: AccessibilityButtonController) {
+                          onButton()
+                      }
+                  }
+                  callback = cb
+                  try { accessibilityButtonController.registerAccessibilityButtonCallback(cb) } catch (_: Exception) {}
+              }
+
+              override fun onAccessibilityEvent(event: AccessibilityEvent?) {}
+
+              override fun onInterrupt() {}
+
+              override fun onDestroy() {
+                  callback?.let {
+                      try { accessibilityButtonController.unregisterAccessibilityButtonCallback(it) } catch (_: Exception) {}
+                  }
+                  callback = null
+                  super.onDestroy()
+              }
+
+              private fun openApp() {
+                  try {
+                      val i = Intent(this, MainActivity::class.java)
+                      i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                      startActivity(i)
+                  } catch (_: Exception) {}
+              }
+
+              private fun onButton() {
+                  val svc = PlayerService.inst
+                  if (svc != null) {
+                      svc.toggleVisibility()
+                      return
+                  }
+                  if (!Settings.canDrawOverlays(this)) {
+                      openApp()
+                      return
+                  }
+                  try {
+                      val s = Intent(this, PlayerService::class.java)
+                      s.putExtra("restore", true)
+                      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(s) else startService(s)
+                  } catch (_: Exception) {
+                      openApp()
+                  }
               }
           }
           EOF
@@ -813,7 +934,7 @@ jobs:
           class PlayerService : Service() {
               companion object {
                   var inst: PlayerService? = null
-                  const val BS = 0.86f
+                  const val BS = 0.80f
               }
 
               lateinit var wm: WindowManager
@@ -825,6 +946,7 @@ jobs:
               private var timerValue: TextView? = null
               private var timerEnd = 0L
               private var timerEot = false
+              private var persistTick = 0
               private val prefs by lazy { getSharedPreferences("fp", Context.MODE_PRIVATE) }
               private var queue = JSONArray()
               private var idx = 0
@@ -851,6 +973,10 @@ jobs:
                           bubble?.invalidate()
                       } catch (_: Exception) {}
                       checkTimer()
+                      if (++persistTick >= 20) {
+                          persistTick = 0
+                          if (playing()) persist()
+                      }
                       mini?.invalidate()
                       h.postDelayed(this, 100)
                   }
@@ -871,6 +997,7 @@ jobs:
               }
 
               override fun onDestroy() {
+                  persist()
                   hideTimerPanel()
                   hideSpeedPanel()
                   h.removeCallbacksAndMessages(null)
@@ -893,16 +1020,19 @@ jobs:
                   if (intent != null && intent.hasExtra("queue")) {
                       queue = JSONArray(intent.getStringExtra("queue"))
                       playAt(intent.getIntExtra("idx", 0), intent.getIntExtra("pos", 0))
+                  } else if (intent != null && intent.getBooleanExtra("restore", false)) {
+                      restoreSaved()
                   }
                   return START_NOT_STICKY
               }
 
-              private fun playAt(i: Int, startPos: Int) {
+              private fun playAt(i: Int, startPos: Int, autoStart: Boolean = true) {
                   if (i < 0 || i >= queue.length()) return
                   val item = queue.getJSONObject(i)
                   idx = i
                   curUri = item.getString("uri")
                   curName = item.getString("name")
+                  prefs.edit().putString("q", queue.toString()).putInt("i", i).putInt("p", startPos).apply()
                   cancelAB(false)
                   ready = false
                   try { mp?.release() } catch (_: Exception) {}
@@ -914,7 +1044,7 @@ jobs:
                           ready = true
                           try { it.playbackParams = it.playbackParams.setSpeed(playbackSpeed) } catch (_: Exception) {}
                           if (startPos > 0) it.seekTo(startPos.coerceAtMost(it.duration))
-                          it.start()
+                          if (autoStart) it.start()
                           bubble?.invalidate()
                       }
                       player.setOnCompletionListener {
@@ -1075,6 +1205,7 @@ jobs:
                       val m = mp ?: return
                       if (m.isPlaying) m.pause() else m.start()
                   } catch (_: Exception) {}
+                  persist()
                   bubble?.invalidate()
               }
 
@@ -1083,6 +1214,7 @@ jobs:
               fun seekTo(ms: Int) {
                   if (!ready) return
                   try { mp?.seekTo(ms.coerceIn(0, dur())) } catch (_: Exception) {}
+                  persist()
                   bubble?.invalidate()
               }
 
@@ -1233,8 +1365,10 @@ jobs:
                   root.addView(title, LinearLayout.LayoutParams(-1, dp(36)))
                   val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
                   val add = panelButton("＋ إضافة", "#2F8CF0") { requestAddTrack() }
+                  val lists = panelButton("القوائم", "#8B5CF6") { openLists() }
                   val close = panelButton("إغلاق", "#2A3566") { hidePlaylistPanel() }
                   actions.addView(add, LinearLayout.LayoutParams(0, dp(42), 1f).apply { marginEnd = dp(6) })
+                  actions.addView(lists, LinearLayout.LayoutParams(0, dp(42), 1f).apply { marginEnd = dp(6) })
                   actions.addView(close, LinearLayout.LayoutParams(0, dp(42), 1f))
                   root.addView(actions, LinearLayout.LayoutParams(-1, dp(42)).apply { bottomMargin = dp(8) })
                   val scroll = ScrollView(this)
@@ -1302,6 +1436,7 @@ jobs:
               }
 
               private fun refreshPlaylistPanel() {
+                  persist()
                   if (playlistPanel != null) showPlaylistPanel()
               }
 
@@ -1328,8 +1463,10 @@ jobs:
                       PixelFormat.TRANSLUCENT
                   )
                   p.gravity = Gravity.TOP or Gravity.START
-                  p.x = resources.displayMetrics.widthPixels - sc(200f)
-                  p.y = dp(150)
+                  val sw0 = resources.displayMetrics.widthPixels
+                  val sh0 = resources.displayMetrics.heightPixels
+                  p.x = prefs.getInt("bx", sw0 - sc(200f)).coerceIn(0, (sw0 - sc(180f)).coerceAtLeast(0))
+                  p.y = prefs.getInt("by", dp(150)).coerceIn(0, (sh0 - sc(200f)).coerceAtLeast(0))
                   v.lp = p
                   wm.addView(v, p)
                   bubble = v
@@ -1461,6 +1598,55 @@ jobs:
                   try { wm.addView(root, params) } catch (_: Exception) { timerPanel = null; timerValue = null }
               }
 
+              fun persist() {
+                  try {
+                      val e = prefs.edit().putString("q", queue.toString()).putInt("i", idx)
+                      if (ready) e.putInt("p", pos())
+                      e.apply()
+                  } catch (_: Exception) {}
+              }
+
+              fun savePos(x: Int, y: Int) {
+                  prefs.edit().putInt("bx", x).putInt("by", y).apply()
+              }
+
+              private fun restoreSaved() {
+                  if (queue.length() == 0) {
+                      try {
+                          queue = JSONArray(prefs.getString("q", "[]") ?: "[]")
+                      } catch (_: Exception) {
+                          queue = JSONArray()
+                      }
+                      if (queue.length() == 0) {
+                          closeAll()
+                          return
+                      }
+                      val i = prefs.getInt("i", 0).coerceIn(0, queue.length() - 1)
+                      playAt(i, prefs.getInt("p", 0), false)
+                      if (prefs.getBoolean("mini", false)) h.post { minimize() }
+                  } else {
+                      ensureBubble()
+                      if (mini != null) restore()
+                  }
+              }
+
+              fun toggleVisibility() {
+                  if (bubble == null) return
+                  if (mini != null) restore() else minimize()
+              }
+
+              fun openLists() {
+                  hidePlaylistPanel()
+                  try {
+                      val i = Intent(this, MainActivity::class.java)
+                      i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                      i.putExtra("showLists", true)
+                      startActivity(i)
+                  } catch (_: Exception) {
+                      Toast.makeText(this, "افتح التطبيق للوصول إلى القوائم", Toast.LENGTH_SHORT).show()
+                  }
+              }
+
               fun sc(v: Float): Int = (v * BS * resources.displayMetrics.density).toInt()
 
               fun minimize() {
@@ -1486,6 +1672,7 @@ jobs:
                   try { wm.addView(v, p) } catch (_: Exception) { return }
                   mini = v
                   b.visibility = View.GONE
+                  prefs.edit().putBoolean("mini", true).apply()
               }
 
               fun restore() {
@@ -1505,9 +1692,12 @@ jobs:
                   }
                   try { wm.removeView(m) } catch (_: Exception) {}
                   mini = null
+                  prefs.edit().putBoolean("mini", false).apply()
               }
 
               fun closeAll() {
+                  persist()
+                  prefs.edit().putBoolean("mini", false).apply()
                   hideTimerPanel()
                   timerEnd = 0L
                   timerEot = false
@@ -1542,9 +1732,15 @@ jobs:
               private var sy = 0
               private var zone = 0
               private var moved = false
-              private var scrub = false
-              private var scrubFrac = 0f
-              private var scrubLastAngle = 0f
+              private var tapCount = 0
+              private var lastTapTime = 0L
+              private var tapAngle = 0f
+              private var pendingFrac = -1f
+              private val clearPending = Runnable {
+                  tapCount = 0
+                  pendingFrac = -1f
+                  invalidate()
+              }
 
               override fun onMeasure(w: Int, h: Int) {
                   setMeasuredDimension(vw.toInt(), vh.toInt())
@@ -1579,8 +1775,8 @@ jobs:
                   super.onDraw(cv)
                   val duration = svc.dur()
                   val real = if (duration > 0) svc.pos().toFloat() / duration else 0f
-                  val frac = if (scrub) scrubFrac else real
-                  val shownMs = if (scrub && duration > 0) (scrubFrac * duration).toInt() else svc.pos()
+                  val frac = real
+                  val shownMs = svc.pos()
 
                   pt.style = Paint.Style.STROKE
                   pt.strokeWidth = 4*d
@@ -1610,6 +1806,15 @@ jobs:
                       if (svc.markB >= 0) mark(cv, svc.markB, duration, "#FFD23F")
                   }
 
+                  if (pendingFrac >= 0f) {
+                      val pa = Math.toRadians(-90.0 + 360.0 * pendingFrac)
+                      pt.color = Color.parseColor("#4CC3FF")
+                      cv.drawCircle(
+                          c + ring * Math.cos(pa).toFloat(),
+                          c + ring * Math.sin(pa).toFloat(),
+                          (4 + tapCount) * d, pt
+                      )
+                  }
                   val angle = Math.toRadians(-90.0 + 360.0*frac)
                   pt.color = Color.WHITE
                   cv.drawCircle(
@@ -1711,10 +1916,39 @@ jobs:
                   pt.color = Color.parseColor("#3C5BB0")
                   cv.drawRoundRect(RectF(c-52*d, 178*d, c+52*d, 198*d), 10*d, 10*d, pt)
                   pt.style = Paint.Style.FILL
-                  pt.color = if (scrub) Color.parseColor("#4CC3FF") else Color.WHITE
+                  pt.color = if (pendingFrac >= 0f) Color.parseColor("#4CC3FF") else Color.WHITE
                   pt.textSize = 11*d
                   pt.typeface = Typeface.DEFAULT_BOLD
-                  cv.drawText(fmt(shownMs) + " / " + fmt(duration), c, 192*d, pt)
+                  val label = if (pendingFrac >= 0f && duration > 0)
+                      "→ " + fmt((pendingFrac * duration).toInt()) + "  " + tapCount + "/3"
+                  else fmt(shownMs) + " / " + fmt(duration)
+                  cv.drawText(label, c, 192*d, pt)
+              }
+
+              private fun tapTimeline(x: Float, y: Float) {
+                  val dur = svc.dur()
+                  if (dur <= 0) return
+                  val ang = angleAt(x, y)
+                  val now = SystemClock.uptimeMillis()
+                  var diff = Math.abs(ang - tapAngle)
+                  if (diff > 180f) diff = 360f - diff
+                  if (tapCount > 0 && now - lastTapTime <= 700L && diff <= 20f) {
+                      tapCount++
+                  } else {
+                      tapCount = 1
+                  }
+                  tapAngle = ang
+                  lastTapTime = now
+                  pendingFrac = ang / 360f
+                  removeCallbacks(clearPending)
+                  if (tapCount >= 3) {
+                      svc.seekTo((pendingFrac * dur).toInt())
+                      tapCount = 0
+                      pendingFrac = -1f
+                  } else {
+                      postDelayed(clearPending, 700L)
+                  }
+                  invalidate()
               }
 
               private fun angleAt(x: Float, y: Float): Float {
@@ -1746,7 +1980,7 @@ jobs:
                   }
 
                   val r = dist(c, c)
-                  if (r > 46*d && r < 66*d && svc.dur() > 0) return 6
+                  if (r > 49*d && r < 61*d && svc.dur() > 0) return 6
                   return 0
               }
 
@@ -1759,25 +1993,12 @@ jobs:
                           sy = lp?.y ?: 0
                           zone = hit(e.x, e.y)
                           moved = false
-                          scrub = zone == 6
-                          if (scrub) {
-                              scrubLastAngle = angleAt(e.x, e.y)
-                              scrubFrac = scrubLastAngle / 360f
-                          }
                           invalidate()
                           return true
                       }
 
                       MotionEvent.ACTION_MOVE -> {
-                          if (scrub) {
-                              val nowAngle = angleAt(e.x, e.y)
-                              var delta = nowAngle - scrubLastAngle
-                              if (delta > 180f) delta -= 360f
-                              if (delta < -180f) delta += 360f
-                              scrubFrac = (scrubFrac + delta / 360f).coerceIn(0f, 1f)
-                              scrubLastAngle = nowAngle
-                              invalidate()
-                          } else {
+                          run {
                               val dx = e.rawX-downX
                               val dy = e.rawY-downY
                               if (!moved && Math.hypot(dx.toDouble(), dy.toDouble()) > 12*d) {
@@ -1795,10 +2016,11 @@ jobs:
                       }
 
                       MotionEvent.ACTION_UP -> {
-                          if (scrub) {
-                              svc.seekTo((scrubFrac*svc.dur()).toInt())
-                              scrub = false
-                          } else if (!moved) {
+                          if (moved) {
+                              val q = lp
+                              if (q != null) svc.savePos(q.x, q.y)
+                          }
+                          if (!moved) {
                               when (zone) {
                                   1 -> svc.toggle()
                                   2 -> svc.seekBy(-15000)
@@ -1811,13 +2033,13 @@ jobs:
                                   10 -> svc.showSpeedPicker()
                                   11 -> svc.minimize()
                                   12 -> svc.showTimerPanel()
+                                  6 -> tapTimeline(e.x, e.y)
                               }
                           }
                           invalidate()
                       }
 
                       MotionEvent.ACTION_CANCEL -> {
-                          scrub = false
                           invalidate()
                       }
                   }
@@ -1979,10 +2201,12 @@ jobs:
           <script>
           let S;
           try { S = JSON.parse(localStorage.getItem('st') || 'null'); } catch (e) { S = null; }
+          if (!S) { try { const bk = Android.loadState(); if (bk) S = JSON.parse(bk); } catch (e) { S = null; } }
           if (!S) S = {lists:[],last:null,open:null};
+          if (!S.pos) S.pos = {};
           S.open = null;
           let target = null;
-          const save = () => { try { localStorage.setItem('st',JSON.stringify(S)); } catch(e){} };
+          const save = () => { const j = JSON.stringify(S); try { localStorage.setItem('st',j); } catch(e){} try { Android.saveState(j); } catch(e){} };
           const uid = () => Math.random().toString(36).slice(2,9);
           const L = id => S.lists.find(l => l.id == id);
           const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -2004,7 +2228,7 @@ jobs:
             Android.play(JSON.stringify(l.tracks.map(t=>({uri:t.uri,name:t.name}))),i,pos||0);
             render();
           }
-          function tap(lid,tid){play(lid,tid,S.last&&S.last.t==tid?S.last.pos:0);}
+          function tap(lid,tid){play(lid,tid,(S.pos&&S.pos[tid])||(S.last&&S.last.t==tid?S.last.pos:0));}
           function resume(){const x=S.last;if(x&&L(x.l))play(x.l,x.t,x.pos);}
           function openL(id){S.open=id;render();}
           function renameL(id){
@@ -2052,7 +2276,7 @@ jobs:
                 const t=l.tracks.find(t=>t.uri==s.uri);
                 if(t){
                   const ch=!S.last||S.last.t!=t.id;
-                  S.last={l:l.id,t:t.id,pos:s.pos};save();
+                  S.last={l:l.id,t:t.id,pos:s.pos};if(!S.pos)S.pos={};S.pos[t.id]=(s.dur&&s.pos>s.dur-3000)?0:s.pos;save();
                   if(ch)render();
                   return;
                 }
