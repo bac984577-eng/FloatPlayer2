@@ -1,34 +1,27 @@
 name: Build Android APK
-
 on:
   push:
     branches: [main, master]
   workflow_dispatch:
-
 permissions:
   contents: write
-
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Setup JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
-
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.7'
-
       - name: Accept Android licenses
         run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
-
       - name: Generate Android project
         shell: bash
         run: |
@@ -39,7 +32,6 @@ jobs:
           mkdir -p proj/app/src/main/res/mipmap-anydpi-v26
           mkdir -p proj/app/src/main/res/xml
           cd proj
-
           cat > settings.gradle <<'EOF'
           pluginManagement {
               repositories {
@@ -57,20 +49,17 @@ jobs:
           rootProject.name = 'FloatPlayer'
           include ':app'
           EOF
-
           cat > build.gradle <<'EOF'
           plugins {
               id 'com.android.application' version '8.5.2' apply false
               id 'org.jetbrains.kotlin.android' version '1.9.24' apply false
           }
           EOF
-
           cat > gradle.properties <<'EOF'
           org.gradle.jvmargs=-Xmx3g -Dfile.encoding=UTF-8
           android.useAndroidX=true
           kotlin.code.style=official
           EOF
-
           cat > app/build.gradle <<'EOF'
           plugins {
               id 'com.android.application'
@@ -93,7 +82,6 @@ jobs:
               kotlinOptions { jvmTarget = '17' }
           }
           EOF
-
           cat > app/src/main/AndroidManifest.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
@@ -136,472 +124,53 @@ jobs:
               </application>
           </manifest>
           EOF
-
           base64 -d > app/src/main/res/drawable-nodpi/ic_fg.png <<'EOF'
-          iVBORw0KGgoAAAANSUhEUgAAAUQAAAFECAIAAADQiNCRAABkrklEQVR42u29abBl13Ue9q11zr1v
-          6HludKMxEhMBzuIgyCRlWSrZkeSU4zhx2WXFdtlJ5Epl8FAVV5xKVWL9SKWcH7YUJ44tO7ZVdjxJ
-          skUptilRHDRApEgCBIiBIGZ0Az0Pr99w7zlr5cee1t7n3G6Ac7+3l1rg7ffuPXfo++01fx/tO/5B
-          VKtW7dY3rh9BtWoVzNWqVatgrlatWgVztWrVKpirVatgrlatWgVztWrVKpirVatWwVytWgVztWrV
-          KpirVatWwVytWrUK5mrVqlUwV6tWwVytWrUK5mrVqlUwV6tWrYK5WrUK5mrVqlUwV6tWrYK5WrVq
-          FczVqlUwV6tWrYK5WrVqFczVqlWrYK5WrVoFc7VqFczVqlWrYK5WrVoFc7Vq1SqYq1WrYK5WrVoF
-          c7Vq1SqYq1WrVsFcrVoFc7Vq1SqYq1WrVsFcrVq1CuZq1apVMFerVsFcrVq1CuZq1apVMFerVq2C
-          uVq1CuZq1apVMFerVq2CuVq1ahXM1apVq2CuVq2CuVq1ahXM1apVq2CuVq1aBXO1ahXM1apVq2Cu
-          Vq1aBXO1atUqmKtVq2CuVq1aBXO1atUqmKtVq1bBXK1atQrmatUqmKtVq1bBXK1atQrmatWqVTBX
-          q1bBXK1atQrmatWqVTBXq1atgrlatR1ubf0Ivhmj+D+afqjDO+R30x3z0VDxZhd+NNgxn0sF8/cg
-          gAEAAvQKEQBgAsH/8XdSSLibKlTBBCY0lO6g2+uj8ehVaKcqgII4vFmidAcAvQJQBQQgEIMaSh9u
-          BXYF83cAxgLMBQAawp4JDk+xf6rHl3D7qu5bwnKjyw1WWxBho8d6j42ernU4vY43NujSjC5u4fIW
-          daIAWkLDtz6qHUQVMlcVEKFd4aWj7XRfs3SwWT0xmR5qmxVulqlZIZpwP9NuS/sN6Tdk81y/cXo2
-          u9jPrsjs4ly2FApqQC1VVFcwf1swTARRzAQC7Jvgvt36jt14zz55cK8eX8GRJd01QcsgUmIQgQgg
-          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
-          Ne17mi4BqA65gvltfjQgAuboZ9od5D3vnb7j48vveXTp4XdMb9vFSyDMMe/QKYkMuJ/V0texOP11
-          hD5rQ5hwA9JNzF6enX/s6tc/e+XZL1175dz8WkM8oSZUwb5XPxkn+j7vuG13nzh68KH7Dr3zwb13
-          3dHu3qNNo732nXgWLscKFidGIlG2pjkQj39iUINmotxK33dXLq+/+LW1r35p/dnH52dfV+mpndbm
-          UwXztwDSHWSuXUt8ojn8num971+676HpqXdMThxu906IW24U2tG8J1HqFarUuxEJ901mQsMMQo9u
-          ju6SrL2w9eZzm2e+fP2lL629/NrWxZn2LfGEGv3ehvEIpPseopNdq3tOndj/jnt333Fq9cRt04OH
-          aTJFOwEaEREXh2tg5/YBeaPEyi24EYF00s+2ts6d3Tr96sbLX9944ZnN06/I5hqIqZ1Ub1zB/C2G
-          tAIdul61Ae/jXSfbw/dNT9zdHj85OXSsPXC43bu7WZpyM6V2iVuwbul8pltbmF/XzYv9tTf7y6/P
-          Lr48O/v81puvzS5cmK85goQJNeQ5MW/B76vL/UWk74mIp9Pl/ftXjh9bOX58+fDh6f6D7b79za7d
-          1E5pMqV26oJnmXV918t8Pl+7Pr9yeXbpwuz8uc03Xp2dfWN+5aLOZiAQN342s8K4gvnbhGp3QyCd
-          9go0YCZa5eWDvGeVpxNqJ9ROqQV0jm6m3Vy7TZlfluvX+o0eIqpOaqNJ68/b4stKfrtb+15ViYiY
-          aDKd7NrVrKxQO6GmpbYlbqTvteu076Tr+vX1/vo17TsVdfOYxE28VP2+VTB/R1Ht0KhQURW4SWqP
-          T7P9TA1RtrSxbTC8CNUBjSoSPxL3f2SoCYmdQKz5YCqGv1Fr60fwjVkBRQYxsYG6u0/5EN0JDZVi
-          7aRpio9l7P5aO00VzN872M7AW7+Zi7Bd7dtnXD+CatUqmKtVq1bBXK1atQrmatWqVTBXq1bBXK1a
-          tQrmatWqVTBXq1atgrlatQrmatWqVTBXq1atgrlatWoVzNWqVatgrlatgrlatWoVzNWqVatgrlat
-          WgVztWoVzNWqVatgrlatWgVztWrVKpirVatgrlatWgVztWrVKpirVatWwVytWrUK5mrVKpirVatW
-          wVytWrUK5mrVqlUwV6tWwVytWrUK5mrVqlUwV6tWrYK5WrUK5mrVqlUwV6tWrYK5WrVqFczVqlWr
-          YK5WrYK5WrVqFczVqlWrYK5WrVoFc7VqFczVqlWrYK5WrVoFc7Vq1SqYq1WrVsFcrVoFc7Vq1SqY
-          q1WrVsFcrVq1CuZq1SqYq1WrVsFcrVq1CuZq1apVMFerVsFcrVq1CuZq1apVMFerVq2CuVq1ahXM
-          1apVMFerVq2CuVq1ahXM1apVq2CuVq2CuVq1ahXM1apVq2CuVq1aBXO1ajvc/n+FxQMbcpP6BQAA
-          AABJRU5ErkJggg==
+          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
           EOF
           cp app/src/main/res/drawable-nodpi/ic_fg.png app/src/main/assets/logo.png
-
           cat > app/src/main/res/values/colors.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <resources>
               <color name="ic_bg">#0F1835</color>
           </resources>
           EOF
-
           cat > app/src/main/res/xml/accessibility_config.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
@@ -612,14 +181,12 @@ jobs:
               android:canRetrieveWindowContent="false"
               android:notificationTimeout="100"/>
           EOF
-
           cat > app/src/main/res/values/strings.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <resources>
               <string name="a11y_desc">يتيح إظهار المشغّل العائم وتصغيره بسرعة من زر إمكانية الوصول في شريط التنقل. لا يقرأ التطبيق محتوى الشاشة.</string>
           </resources>
           EOF
-
           cat > app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
@@ -627,9 +194,7 @@ jobs:
               <foreground android:drawable="@drawable/ic_fg"/>
           </adaptive-icon>
           EOF
-
           cp app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml
-
           cat > app/src/main/res/values/styles.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <resources>
@@ -643,10 +208,8 @@ jobs:
               </style>
           </resources>
           EOF
-
           cat > app/src/main/java/com/floatplayer/MainActivity.kt <<'EOF'
           package com.floatplayer
-
           import android.app.Activity
           import android.content.Intent
           import android.graphics.Color
@@ -662,10 +225,8 @@ jobs:
           import android.widget.Toast
           import org.json.JSONArray
           import org.json.JSONObject
-
           class MainActivity : Activity() {
               private lateinit var web: WebView
-
               override fun onCreate(b: Bundle?) {
                   super.onCreate(b)
                   val skipAuto = intent?.getBooleanExtra("pickForQueue", false) == true ||
@@ -702,7 +263,6 @@ jobs:
                       requestPermissions(arrayOf("android.permission.POST_NOTIFICATIONS"), 1)
                   }
               }
-
               override fun onNewIntent(intent: Intent?) {
                   super.onNewIntent(intent)
                   setIntent(intent)
@@ -715,7 +275,6 @@ jobs:
                       web.post { openFolderPicker(10) }
                   }
               }
-
               private fun openFolderPicker(requestCode: Int) {
                   val i = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
                   i.addFlags(
@@ -724,12 +283,10 @@ jobs:
                   )
                   startActivityForResult(i, requestCode)
               }
-
               private fun isAudioName(n: String): Boolean {
                   val e = n.substringAfterLast('.', "").lowercase()
                   return e in setOf("mp3", "m4a", "aac", "wav", "ogg", "opus", "flac", "wma", "amr", "mka")
               }
-
               private fun naturalCompare(a: String, b: String): Int {
                   var i = 0
                   var j = 0
@@ -755,7 +312,6 @@ jobs:
                   }
                   return (a.length - i) - (b.length - j)
               }
-
               private fun scanFolder(tree: Uri, docId: String, out: ArrayList<Pair<String, String>>, depth: Int) {
                   val kids = ArrayList<Triple<String, String, String>>()
                   val children = DocumentsContract.buildChildDocumentsUriUsingTree(tree, docId)
@@ -781,7 +337,6 @@ jobs:
                       }
                   }
               }
-
               private fun handleFolder(rc: Int, tree: Uri) {
                   try {
                       contentResolver.takePersistableUriPermission(tree, Intent.FLAG_GRANT_READ_URI_PERMISSION)
@@ -813,11 +368,9 @@ jobs:
                       }
                   }.start()
               }
-
               private fun hasSavedPlayer(): Boolean = try {
                   JSONArray(getSharedPreferences("fp", MODE_PRIVATE).getString("q", "[]") ?: "[]").length() > 0
               } catch (_: Exception) { false }
-
               private fun openPicker(requestCode: Int) {
                   val i = Intent(Intent.ACTION_OPEN_DOCUMENT)
                   i.addCategory(Intent.CATEGORY_OPENABLE)
@@ -829,13 +382,11 @@ jobs:
                   )
                   startActivityForResult(i, requestCode)
               }
-
               override fun onBackPressed() {
                   web.evaluateJavascript("goBack()") {
                       if (it == "true") finish()
                   }
               }
-
               private fun nameOf(u: Uri): String {
                   var n = "صوتية"
                   try {
@@ -848,7 +399,6 @@ jobs:
                   } catch (_: Exception) {}
                   return n.substringBeforeLast('.')
               }
-
               @Deprecated("Deprecated in Android")
               override fun onActivityResult(rc: Int, res: Int, d: Intent?) {
                   super.onActivityResult(rc, res, d)
@@ -879,18 +429,15 @@ jobs:
                       }
                   }
               }
-
               inner class Bridge {
                   @JavascriptInterface
                   fun pick() {
                       runOnUiThread { openPicker(7) }
                   }
-
                   @JavascriptInterface
                   fun pickFolder() {
                       runOnUiThread { openFolderPicker(9) }
                   }
-
                   @JavascriptInterface
                   fun play(q: String, i: Int, p: Int) {
                       runOnUiThread {
@@ -919,35 +466,28 @@ jobs:
                           }
                       }
                   }
-
                   @JavascriptInterface
                   fun saveState(s: String) {
                       getSharedPreferences("fp", MODE_PRIVATE).edit().putString("web", s).apply()
                   }
-
                   @JavascriptInterface
                   fun loadState(): String =
                       getSharedPreferences("fp", MODE_PRIVATE).getString("web", "") ?: ""
-
                   @JavascriptInterface
                   fun state(): String = PlayerService.inst?.stateJson() ?: "{}"
               }
           }
           EOF
-
           cat > app/src/main/java/com/floatplayer/PlayerAccessibilityService.kt <<'EOF'
           package com.floatplayer
-
           import android.accessibilityservice.AccessibilityButtonController
           import android.accessibilityservice.AccessibilityService
           import android.content.Intent
           import android.os.Build
           import android.provider.Settings
           import android.view.accessibility.AccessibilityEvent
-
           class PlayerAccessibilityService : AccessibilityService() {
               private var callback: AccessibilityButtonController.AccessibilityButtonCallback? = null
-
               override fun onServiceConnected() {
                   super.onServiceConnected()
                   val cb = object : AccessibilityButtonController.AccessibilityButtonCallback() {
@@ -958,11 +498,8 @@ jobs:
                   callback = cb
                   try { accessibilityButtonController.registerAccessibilityButtonCallback(cb) } catch (_: Exception) {}
               }
-
               override fun onAccessibilityEvent(event: AccessibilityEvent?) {}
-
               override fun onInterrupt() {}
-
               override fun onDestroy() {
                   callback?.let {
                       try { accessibilityButtonController.unregisterAccessibilityButtonCallback(it) } catch (_: Exception) {}
@@ -970,7 +507,6 @@ jobs:
                   callback = null
                   super.onDestroy()
               }
-
               private fun openApp() {
                   try {
                       val i = Intent(this, MainActivity::class.java)
@@ -978,7 +514,6 @@ jobs:
                       startActivity(i)
                   } catch (_: Exception) {}
               }
-
               private fun onButton() {
                   val svc = PlayerService.inst
                   if (svc != null) {
@@ -999,10 +534,8 @@ jobs:
               }
           }
           EOF
-
           cat > app/src/main/java/com/floatplayer/PlayerService.kt <<'EOF'
           package com.floatplayer
-
           import android.app.Notification
           import android.app.NotificationChannel
           import android.app.NotificationManager
@@ -1047,18 +580,15 @@ jobs:
           import java.util.Locale
           import org.json.JSONArray
           import org.json.JSONObject
-
           fun fmt(ms: Int): String {
               val s = ms.coerceAtLeast(0) / 1000
               return "%d:%02d".format(s / 60, s % 60)
           }
-
           class PlayerService : Service() {
               companion object {
                   var inst: PlayerService? = null
                   const val BS = 0.80f
               }
-
               lateinit var wm: WindowManager
               private var mp: MediaPlayer? = null
               private var ready = false
@@ -1095,7 +625,6 @@ jobs:
               private var mini: MiniView? = null
               private var playlistPanel: View? = null
               private val h = Handler(Looper.getMainLooper())
-
               private val tick = object : Runnable {
                   override fun run() {
                       try {
@@ -1116,9 +645,7 @@ jobs:
                       h.postDelayed(this, 100)
                   }
               }
-
               override fun onBind(intent: Intent?): IBinder? = null
-
               override fun onCreate() {
                   super.onCreate()
                   inst = this
@@ -1130,7 +657,6 @@ jobs:
                   playbackSpeed = prefs.getFloat("speed", 1.0f)
                   h.post(tick)
               }
-
               override fun onDestroy() {
                   persist()
                   hideTimerPanel()
@@ -1142,7 +668,6 @@ jobs:
                   inst = null
                   super.onDestroy()
               }
-
               private fun notif(title: String): Notification =
                   Notification.Builder(this, "pl")
                       .setSmallIcon(android.R.drawable.ic_media_play)
@@ -1150,7 +675,6 @@ jobs:
                       .setContentText("المشغّل العائم يعمل")
                       .setOngoing(true)
                       .build()
-
               override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
                   startForeground(1, notif(if (curName.isEmpty()) "المشغّل" else curName))
                   if (intent != null && intent.hasExtra("queue")) {
@@ -1161,7 +685,6 @@ jobs:
                   }
                   return START_NOT_STICKY
               }
-
               private fun isVideoItem(uri: String, name: String): Boolean {
                   val mime = try { contentResolver.getType(Uri.parse(uri)) ?: "" } catch (_: Exception) { "" }
                   if (mime.startsWith("video/")) return true
@@ -1169,7 +692,6 @@ jobs:
                   return listOf(".mp4", ".mkv", ".webm", ".3gp", ".avi", ".mov", ".m4v", ".ts", ".mpeg", ".mpg")
                       .any { lower.endsWith(it) }
               }
-
               private fun hideVideoPanel() {
                   videoPanel?.let { try { wm.removeView(it) } catch (_: Exception) {} }
                   videoPanel = null
@@ -1177,7 +699,6 @@ jobs:
                   try { videoSurface?.release() } catch (_: Exception) {}
                   videoSurface = null
               }
-
               private fun showVideoPanel() {
                   if (videoPanel != null) return
                   val root = FrameLayout(this)
@@ -1242,7 +763,6 @@ jobs:
                       videoTexture = null
                   }
               }
-
               private fun playAt(i: Int, startPos: Int, autoStart: Boolean = true) {
                   if (i < 0 || i >= queue.length()) return
                   val item = queue.getJSONObject(i)
@@ -1294,12 +814,10 @@ jobs:
                   ensureBubble()
                   refreshPlaylistPanel()
               }
-
               fun playbackSpeedLabel(): String {
                   val s = "%.2f".format(Locale.US, playbackSpeed).trimEnd('0')
                   return (if (s.endsWith(".")) s + "0" else s) + "×"
               }
-
               fun setSpeed(v: Float) {
                   val s = (Math.round(v * 20) / 20f).coerceIn(0.5f, 3.0f)
                   playbackSpeed = s
@@ -1316,12 +834,10 @@ jobs:
                   }
                   bubble?.invalidate()
               }
-
               fun hideSpeedPanel() {
                   speedPanel?.let { try { wm.removeView(it) } catch (_: Exception) {} }
                   speedPanel = null
               }
-
               fun showSpeedPicker() {
                   if (speedPanel != null) { hideSpeedPanel(); return }
                   hidePlaylistPanel()
@@ -1348,7 +864,6 @@ jobs:
                       progressBackgroundTintList = ColorStateList.valueOf(Color.rgb(70, 86, 140))
                   }
                   val chips = ArrayList<Pair<Float, Button>>()
-
                   fun sync() {
                       value.text = playbackSpeedLabel()
                       seek.progress = Math.round((playbackSpeed - 0.5f) / 0.05f)
@@ -1358,8 +873,6 @@ jobs:
                               .setColor(Color.parseColor(if (on) "#3D8BFF" else "#2A3A78"))
                       }
                   }
-
-                  // السطر العلوي: − القيمة +
                   val top = LinearLayout(this).apply {
                       orientation = LinearLayout.HORIZONTAL
                       gravity = Gravity.CENTER_VERTICAL
@@ -1370,7 +883,6 @@ jobs:
                   top.addView(panelButton("+", "#2A3A78") { setSpeed(playbackSpeed + 0.05f); sync() },
                       LinearLayout.LayoutParams(dp(48), dp(44)))
                   root.addView(top, LinearLayout.LayoutParams(-1, dp(44)))
-
                   seek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                       override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
                           if (fromUser) { setSpeed(0.5f + p * 0.05f); sync() }
@@ -1381,8 +893,6 @@ jobs:
                   root.addView(seek, LinearLayout.LayoutParams(-1, dp(40)).apply {
                       topMargin = dp(6); bottomMargin = dp(6)
                   })
-
-                  // الأزرار الجاهزة
                   val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
                   for (v in floatArrayOf(0.75f, 1.0f, 1.25f, 1.5f, 2.0f)) {
                       val label = if (v == v.toInt().toFloat()) "${v}×" else "$v×"
@@ -1391,18 +901,14 @@ jobs:
                       row.addView(b, LinearLayout.LayoutParams(0, dp(40), 1f).apply { marginEnd = dp(3) })
                   }
                   root.addView(row, LinearLayout.LayoutParams(-1, dp(40)))
-
-                  // إعادة وإغلاق
                   val bottom = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
                   bottom.addView(panelButton("إعادة 1.0×", "#2F8CF0") { setSpeed(1.0f); sync() },
                       LinearLayout.LayoutParams(0, dp(42), 1f).apply { marginEnd = dp(6) })
                   bottom.addView(panelButton("إغلاق", "#2A3566") { hideSpeedPanel() },
                       LinearLayout.LayoutParams(0, dp(42), 1f))
                   root.addView(bottom, LinearLayout.LayoutParams(-1, dp(42)).apply { topMargin = dp(8) })
-
                   sync()
                   speedPanel = root
-
                   val bp = bubble?.lp
                   val screenW = resources.displayMetrics.widthPixels
                   val screenH = resources.displayMetrics.heightPixels
@@ -1418,11 +924,9 @@ jobs:
                   params.y = ((bp?.y ?: dp(150)) + sc(206f)).coerceAtMost(screenH - dp(260)).coerceAtLeast(dp(4))
                   try { wm.addView(root, params) } catch (_: Exception) { speedPanel = null }
               }
-
               fun pos(): Int = try { if (ready) mp?.currentPosition ?: 0 else 0 } catch (_: Exception) { 0 }
               fun dur(): Int = try { if (ready) mp?.duration ?: 0 else 0 } catch (_: Exception) { 0 }
               fun playing(): Boolean = try { ready && (mp?.isPlaying ?: false) } catch (_: Exception) { false }
-
               fun toggle() {
                   if (!ready) return
                   try {
@@ -1432,16 +936,13 @@ jobs:
                   persist()
                   bubble?.invalidate()
               }
-
               fun seekBy(ms: Int) = seekTo(pos() + ms)
-
               fun seekTo(ms: Int) {
                   if (!ready) return
                   try { mp?.seekTo(ms.coerceIn(0, dur())) } catch (_: Exception) {}
                   persist()
                   bubble?.invalidate()
               }
-
               fun setA() {
                   if (!ready) return
                   markA = pos()
@@ -1451,7 +952,6 @@ jobs:
                   Toast.makeText(this, "تم تحديد A عند ${fmt(markA)}", Toast.LENGTH_SHORT).show()
                   bubble?.invalidate()
               }
-
               fun setB() {
                   if (!ready) return
                   if (markA < 0) {
@@ -1473,7 +973,6 @@ jobs:
                   Toast.makeText(this, "بدأ التكرار بين A وB", Toast.LENGTH_SHORT).show()
                   bubble?.invalidate()
               }
-
               fun cancelAB(showMessage: Boolean = true) {
                   val active = loopA >= 0
                   loopA = -1
@@ -1487,8 +986,6 @@ jobs:
                   }
                   bubble?.invalidate()
               }
-
-
               fun appendTracks(items: JSONArray) {
                   val wasEmpty = queue.length() == 0
                   for (i in 0 until items.length()) {
@@ -1501,7 +998,6 @@ jobs:
                   refreshPlaylistPanel()
                   bubble?.invalidate()
               }
-
               fun moveTrack(from: Int, to: Int) {
                   if (from !in 0 until queue.length() || to !in 0 until queue.length()) return
                   if (from == to) return
@@ -1520,7 +1016,6 @@ jobs:
                   refreshPlaylistPanel()
                   bubble?.invalidate()
               }
-
               fun removeTrack(at: Int) {
                   if (at !in 0 until queue.length()) return
                   val removingCurrent = at == idx
@@ -1549,7 +1044,6 @@ jobs:
                   }
                   bubble?.invalidate()
               }
-
               fun requestAddTrack() {
                   hidePlaylistPanel()
                   try {
@@ -1561,7 +1055,6 @@ jobs:
                       Toast.makeText(this, "افتح التطبيق لإضافة صوتية", Toast.LENGTH_SHORT).show()
                   }
               }
-
               fun showPlaylistPanel() {
                   if (queue.length() == 0) {
                       hidePlaylistPanel()
@@ -1651,7 +1144,6 @@ jobs:
                   params.y = (((bp?.y ?: dp(150)) + sc(206f)).coerceAtMost(resources.displayMetrics.heightPixels - dp(390))).coerceAtLeast(dp(4))
                   try { wm.addView(root, params) } catch (_: Exception) { playlistPanel = null }
               }
-
               private fun panelButton(text: String, color: String, action: () -> Unit): Button =
                   Button(this).apply {
                       this.text = text
@@ -1665,17 +1157,14 @@ jobs:
                       setPadding(dp(2), 0, dp(2), 0)
                       setOnClickListener { action() }
                   }
-
               fun hidePlaylistPanel() {
                   playlistPanel?.let { try { wm.removeView(it) } catch (_: Exception) {} }
                   playlistPanel = null
               }
-
               private fun refreshPlaylistPanel() {
                   persist()
                   if (playlistPanel != null) showPlaylistPanel()
               }
-
               fun stateJson(): String = try {
                   JSONObject()
                       .put("uri", curUri)
@@ -1686,9 +1175,7 @@ jobs:
                       .put("loopB", loopB)
                       .toString()
               } catch (_: Exception) { "{}" }
-
               fun dp(x: Int): Int = (x * resources.displayMetrics.density).toInt()
-
               private fun ensureBubble() {
                   if (bubble != null) return
                   val v = BubbleView(this, this)
@@ -1707,7 +1194,6 @@ jobs:
                   wm.addView(v, p)
                   bubble = v
               }
-
               private fun checkTimer() {
                   if (timerEnd > 0L && SystemClock.elapsedRealtime() >= timerEnd) {
                       timerEnd = 0L
@@ -1718,47 +1204,38 @@ jobs:
                   }
                   timerValue?.text = timerStatus()
               }
-
               fun timerLeftMs(): Long =
                   if (timerEnd > 0L) (timerEnd - SystemClock.elapsedRealtime()).coerceAtLeast(0L) else 0L
-
               fun timerActive(): Boolean = timerEnd > 0L || timerEot
-
               fun timerButtonLabel(): String =
                   if (timerEnd > 0L) Math.max(1L, (timerLeftMs() + 59999L) / 60000L).toString() else "■"
-
               fun timerStatus(): String = when {
                   timerEnd > 0L -> fmt(timerLeftMs().toInt())
                   timerEot -> "عند نهاية الصوتية"
                   else -> "غير مفعّل"
               }
-
               fun setTimer(min: Int) {
                   timerEot = false
                   timerEnd = SystemClock.elapsedRealtime() + min * 60_000L
                   Toast.makeText(this, "سيتوقف التشغيل بعد $min دقيقة", Toast.LENGTH_SHORT).show()
                   bubble?.invalidate()
               }
-
               fun setTimerEndOfTrack() {
                   timerEnd = 0L
                   timerEot = true
                   Toast.makeText(this, "سيتوقف التشغيل عند نهاية الصوتية", Toast.LENGTH_SHORT).show()
                   bubble?.invalidate()
               }
-
               fun cancelTimer() {
                   timerEnd = 0L
                   timerEot = false
                   bubble?.invalidate()
               }
-
               fun hideTimerPanel() {
                   timerPanel?.let { try { wm.removeView(it) } catch (_: Exception) {} }
                   timerPanel = null
                   timerValue = null
               }
-
               fun showTimerPanel() {
                   if (timerPanel != null) { hideTimerPanel(); return }
                   hideSpeedPanel()
@@ -1788,7 +1265,6 @@ jobs:
                   timerValue = value
                   root.addView(title, LinearLayout.LayoutParams(-1, dp(22)))
                   root.addView(value, LinearLayout.LayoutParams(-1, dp(44)))
-
                   fun chipRow(vals: IntArray) {
                       val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
                       for (m in vals) {
@@ -1816,7 +1292,6 @@ jobs:
                   )
                   root.addView(bottom, LinearLayout.LayoutParams(-1, dp(40)).apply { topMargin = dp(8) })
                   timerPanel = root
-
                   val bp = bubble?.lp
                   val screenW = resources.displayMetrics.widthPixels
                   val screenH = resources.displayMetrics.heightPixels
@@ -1833,7 +1308,6 @@ jobs:
                   params.y = ((bp?.y ?: dp(150)) + sc(206f)).coerceAtMost(screenH - dp(300)).coerceAtLeast(dp(4))
                   try { wm.addView(root, params) } catch (_: Exception) { timerPanel = null; timerValue = null }
               }
-
               fun persist() {
                   try {
                       val e = prefs.edit().putString("q", queue.toString()).putInt("i", idx)
@@ -1841,11 +1315,9 @@ jobs:
                       e.apply()
                   } catch (_: Exception) {}
               }
-
               fun savePos(x: Int, y: Int) {
                   prefs.edit().putInt("bx", x).putInt("by", y).apply()
               }
-
               private fun restoreSaved() {
                   if (queue.length() == 0) {
                       try {
@@ -1865,12 +1337,10 @@ jobs:
                       if (mini != null) restore()
                   }
               }
-
               fun toggleVisibility() {
                   if (bubble == null) return
                   if (mini != null) restore() else minimize()
               }
-
               fun openLists() {
                   hidePlaylistPanel()
                   try {
@@ -1882,12 +1352,10 @@ jobs:
                       Toast.makeText(this, "افتح التطبيق للوصول إلى القوائم", Toast.LENGTH_SHORT).show()
                   }
               }
-
               fun trackLabel(i: Int): String {
                   val name = queue.optJSONObject(i)?.optString("name", "صوتية") ?: "صوتية"
                   return (if (i == idx) "▶  " else "") + (i + 1) + ". " + name
               }
-
               fun tapTrack(i: Int) {
                   val now = SystemClock.uptimeMillis()
                   if (i == trackTapIdx && now - trackTapTime <= 700L) {
@@ -1907,7 +1375,6 @@ jobs:
                   plLabels[i]?.text = trackLabel(i) + "   " + "●".repeat(trackTapCount) + "○".repeat(3 - trackTapCount)
                   h.postDelayed(resetMark, 700L)
               }
-
               fun requestAddFolder() {
                   hidePlaylistPanel()
                   try {
@@ -1919,9 +1386,7 @@ jobs:
                       Toast.makeText(this, "افتح التطبيق لإضافة مجلد", Toast.LENGTH_SHORT).show()
                   }
               }
-
               fun sc(v: Float): Int = (v * BS * resources.displayMetrics.density).toInt()
-
               fun minimize() {
                   val b = bubble ?: return
                   if (mini != null) return
@@ -1947,7 +1412,6 @@ jobs:
                   b.visibility = View.GONE
                   prefs.edit().putBoolean("mini", true).apply()
               }
-
               fun restore() {
                   val m = mini ?: return
                   val mp = m.lp
@@ -1967,7 +1431,6 @@ jobs:
                   mini = null
                   prefs.edit().putBoolean("mini", false).apply()
               }
-
               fun closeAll() {
                   persist()
                   prefs.edit().putBoolean("mini", false).apply()
@@ -1989,7 +1452,6 @@ jobs:
                   stopSelf()
               }
           }
-
           class BubbleView(ctx: Context, private val svc: PlayerService) : View(ctx) {
               var lp: WindowManager.LayoutParams? = null
               private val d = ctx.resources.displayMetrics.density * PlayerService.BS
@@ -2014,11 +1476,9 @@ jobs:
                   pendingFrac = -1f
                   invalidate()
               }
-
               override fun onMeasure(w: Int, h: Int) {
                   setMeasuredDimension(vw.toInt(), vh.toInt())
               }
-
               private fun mark(cv: Canvas, ms: Int, duration: Int, color: String) {
                   if (duration <= 0) return
                   val a = Math.toRadians(-90.0 + 360.0 * ms.toDouble() / duration)
@@ -2029,7 +1489,6 @@ jobs:
                       5 * d, pt
                   )
               }
-
               private fun button(cv: Canvas, x: Float, y: Float, label: String, color: String) {
                   pt.style = Paint.Style.FILL
                   pt.color = Color.parseColor(color)
@@ -2043,19 +1502,16 @@ jobs:
                   pt.textSize = 11*d
                   cv.drawText(label, x, y + 4*d, pt)
               }
-
               override fun onDraw(cv: Canvas) {
                   super.onDraw(cv)
                   val duration = svc.dur()
                   val real = if (duration > 0) svc.pos().toFloat() / duration else 0f
                   val frac = real
                   val shownMs = svc.pos()
-
                   pt.style = Paint.Style.STROKE
                   pt.strokeWidth = 4*d
                   pt.color = Color.parseColor("#2A3A78")
                   cv.drawCircle(c, c, ring, pt)
-
                   pt.strokeCap = Paint.Cap.ROUND
                   pt.shader = SweepGradient(
                       c, c,
@@ -2073,12 +1529,10 @@ jobs:
                   pt.shader = null
                   pt.strokeCap = Paint.Cap.BUTT
                   pt.style = Paint.Style.FILL
-
                   if (duration > 0) {
                       if (svc.markA >= 0) mark(cv, svc.markA, duration, "#FF4FA3")
                       if (svc.markB >= 0) mark(cv, svc.markB, duration, "#FFD23F")
                   }
-
                   if (pendingFrac >= 0f) {
                       val pa = Math.toRadians(-90.0 + 360.0 * pendingFrac)
                       pt.color = Color.parseColor("#4CC3FF")
@@ -2095,7 +1549,6 @@ jobs:
                       c + ring*Math.sin(angle).toFloat(),
                       6*d, pt
                   )
-
                   pt.color = Color.parseColor("#18285E")
                   cv.drawCircle(c, c, 42*d, pt)
                   pt.style = Paint.Style.STROKE
@@ -2111,7 +1564,6 @@ jobs:
                   cv.drawCircle(c, c, 21*d, pt)
                   pt.shader = null
                   pt.color = Color.WHITE
-
                   if (svc.playing()) {
                       cv.drawRect(c-7*d, c-9*d, c-2*d, c+9*d, pt)
                       cv.drawRect(c+3*d, c-9*d, c+8*d, c+9*d, pt)
@@ -2123,7 +1575,6 @@ jobs:
                       path.close()
                       cv.drawPath(path, pt)
                   }
-
                   pt.color = Color.WHITE
                   pt.textAlign = Paint.Align.CENTER
                   pt.typeface = Typeface.DEFAULT_BOLD
@@ -2133,14 +1584,11 @@ jobs:
                   pt.textSize = 9*d
                   cv.drawText("15", c-31*d, c+16*d, pt)
                   cv.drawText("15", c+31*d, c+16*d, pt)
-
                   if (svc.loopA >= 0 && svc.loopB > svc.loopA) {
                       pt.color = Color.parseColor("#FFD23F")
                       pt.textSize = 9*d
                       cv.drawText("A-B", c, c-28*d, pt)
                   }
-
-                  // أزرار الصف العلوي: قائمة، تصغير، إغلاق
                   pt.color = Color.parseColor("#1B2B5E")
                   cv.drawCircle(14*d, 14*d, 11*d, pt)
                   cv.drawCircle(vw-41*d, 14*d, 10.5f*d, pt)
@@ -2150,8 +1598,6 @@ jobs:
                   cv.drawText("≡", 14*d, 19*d, pt)
                   cv.drawText("−", vw-41*d, 19*d, pt)
                   cv.drawText("×", vw-14*d, 19*d, pt)
-
-                  // شارة السرعة
                   pt.shader = LinearGradient(
                       c-27*d, 0f, c+27*d, 0f,
                       Color.parseColor("#3DB8F5"), Color.parseColor("#8B5CF6"),
@@ -2162,8 +1608,6 @@ jobs:
                   pt.color = Color.WHITE
                   pt.textSize = 11*d
                   cv.drawText(svc.playbackSpeedLabel(), c, 20*d, pt)
-
-                  // A / B / إلغاء
                   button(cv, c-57*d, byBtn, "A", if (svc.markA >= 0) "#E2409F" else "#26356B")
                   button(cv, c-19*d, byBtn, "B", if (svc.loopB >= 0) "#F5A524" else "#26356B")
                   button(cv, c+19*d, byBtn, "×", if (svc.loopA >= 0) "#F0506E" else "#26356B")
@@ -2179,8 +1623,6 @@ jobs:
                       cv.drawLine(tx, byBtn, tx + 3*d, byBtn + 2*d, pt)
                       pt.style = Paint.Style.FILL
                   }
-
-                  // عداد موضع التشغيل
                   pt.style = Paint.Style.FILL
                   pt.color = Color.parseColor("#1B2B5E")
                   cv.drawRoundRect(RectF(c-52*d, 178*d, c+52*d, 198*d), 10*d, 10*d, pt)
@@ -2197,7 +1639,6 @@ jobs:
                   else fmt(shownMs) + " / " + fmt(duration)
                   cv.drawText(label, c, 192*d, pt)
               }
-
               private fun tapTimeline(x: Float, y: Float) {
                   val dur = svc.dur()
                   if (dur <= 0) return
@@ -2223,7 +1664,6 @@ jobs:
                   }
                   invalidate()
               }
-
               private fun angleAt(x: Float, y: Float): Float {
                   var deg = Math.toDegrees(
                       Math.atan2((y-c).toDouble(), (x-c).toDouble())
@@ -2232,11 +1672,9 @@ jobs:
                   if (deg >= 360f) deg -= 360f
                   return deg
               }
-
               private fun hit(x: Float, y: Float): Int {
                   fun dist(ax: Float, ay: Float): Float =
                       Math.hypot((x-ax).toDouble(), (y-ay).toDouble()).toFloat()
-
                   if (dist(vw-14*d, 14*d) < 14*d) return 4
                   if (dist(vw-41*d, 14*d) < 13*d) return 11
                   if (dist(14*d, 14*d) < 15*d) return 5
@@ -2246,17 +1684,14 @@ jobs:
                   if (dist(c+19*d, byBtn) < 18*d) return 9
                   if (dist(c+57*d, byBtn) < 18*d) return 12
                   if (dist(c, c) < 24*d) return 1
-
                   if (y > c-26*d && y < c+26*d) {
                       if (x > c-43*d && x < c-24*d) return 2
                       if (x > c+24*d && x < c+43*d) return 3
                   }
-
                   val r = dist(c, c)
                   if (r > 49*d && r < 61*d && svc.dur() > 0) return 6
                   return 0
               }
-
               override fun onTouchEvent(e: MotionEvent): Boolean {
                   when (e.actionMasked) {
                       MotionEvent.ACTION_DOWN -> {
@@ -2269,7 +1704,6 @@ jobs:
                           invalidate()
                           return true
                       }
-
                       MotionEvent.ACTION_MOVE -> {
                           run {
                               val dx = e.rawX-downX
@@ -2287,7 +1721,6 @@ jobs:
                               }
                           }
                       }
-
                       MotionEvent.ACTION_UP -> {
                           if (moved) {
                               val q = lp
@@ -2311,7 +1744,6 @@ jobs:
                           }
                           invalidate()
                       }
-
                       MotionEvent.ACTION_CANCEL -> {
                           invalidate()
                       }
@@ -2319,7 +1751,6 @@ jobs:
                   return true
               }
           }
-
           class MiniView(ctx: Context, private val svc: PlayerService) : View(ctx) {
               var lp: WindowManager.LayoutParams? = null
               private val d = ctx.resources.displayMetrics.density
@@ -2333,21 +1764,17 @@ jobs:
               private var sy = 0
               private var moved = false
               private var onBadge = false
-
               override fun onMeasure(w: Int, h: Int) {
                   setMeasuredDimension(size.toInt(), size.toInt())
               }
-
               override fun onDraw(cv: Canvas) {
                   super.onDraw(cv)
                   val r = rad
                   val duration = svc.dur()
                   val frac = if (duration > 0) svc.pos().toFloat() / duration else 0f
-
                   pt.style = Paint.Style.FILL
                   pt.color = Color.parseColor("#0F1835")
                   cv.drawCircle(r, r, r - 1*d, pt)
-
                   cv.save()
                   val clip = Path()
                   clip.addCircle(r, r, r - 5*d, Path.Direction.CW)
@@ -2361,7 +1788,6 @@ jobs:
                       pt
                   )
                   cv.restore()
-
                   pt.style = Paint.Style.STROKE
                   pt.strokeWidth = 3*d
                   pt.color = Color.parseColor("#2A3A78")
@@ -2373,8 +1799,6 @@ jobs:
                       -90f, 360f*frac, false, pt
                   )
                   pt.strokeCap = Paint.Cap.BUTT
-
-                  // زر التشغيل / الإيقاف
                   val bx = 51*d
                   val by = 51*d
                   pt.style = Paint.Style.FILL
@@ -2389,5 +1813,198 @@ jobs:
                   pt.shader = null
                   pt.color = Color.WHITE
                   if (svc.playing()) {
-            
-تم اقتطاع المعاينة بسبب كبر حجم الملف
+                      cv.drawRect(bx-4.5f*d, by-5*d, bx-1.5f*d, by+5*d, pt)
+                      cv.drawRect(bx+1.5f*d, by-5*d, bx+4.5f*d, by+5*d, pt)
+                  } else {
+                      val tri = Path()
+                      tri.moveTo(bx-3*d, by-5.5f*d)
+                      tri.lineTo(bx-3*d, by+5.5f*d)
+                      tri.lineTo(bx+5.5f*d, by)
+                      tri.close()
+                      cv.drawPath(tri, pt)
+                  }
+              }
+              override fun onTouchEvent(e: MotionEvent): Boolean {
+                  when (e.actionMasked) {
+                      MotionEvent.ACTION_DOWN -> {
+                          downX = e.rawX
+                          downY = e.rawY
+                          sx = lp?.x ?: 0
+                          sy = lp?.y ?: 0
+                          moved = false
+                          onBadge = Math.hypot((e.x - 51*d).toDouble(), (e.y - 51*d).toDouble()) < 15*d
+                          return true
+                      }
+                      MotionEvent.ACTION_MOVE -> {
+                          val dx = e.rawX - downX
+                          val dy = e.rawY - downY
+                          if (!moved && Math.hypot(dx.toDouble(), dy.toDouble()) > 10*d) moved = true
+                          if (moved) {
+                              val p = lp
+                              if (p != null) {
+                                  p.x = sx + dx.toInt()
+                                  p.y = sy + dy.toInt()
+                                  try { svc.wm.updateViewLayout(this, p) } catch (_: Exception) {}
+                              }
+                          }
+                      }
+                      MotionEvent.ACTION_UP -> {
+                          if (!moved) {
+                              if (onBadge) { svc.toggle(); invalidate() } else svc.restore()
+                          }
+                      }
+                  }
+                  return true
+              }
+          }
+          EOF
+          cat > app/src/main/assets/index.html <<'EOF'
+          <!DOCTYPE html>
+          <html lang="ar" dir="rtl">
+          <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width,initial-scale=1">
+          <style>
+          :root{--bg:#0f1835;--tx:#f3f6ff;--mu:#9fb0dc;--b:#4cc3ff;--p:#f05ae8;--o:#ff8a4c;--g:#5ce06a;--line:rgba(255,255,255,.09)}
+          *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+          body{margin:0;padding:18px 14px 70px;color:var(--tx);font-family:sans-serif;min-height:100vh;
+            background:radial-gradient(90% 45% at 100% 0%,rgba(139,92,246,.30),transparent 70%),
+                       radial-gradient(80% 40% at 0% 100%,rgba(61,184,245,.22),transparent 70%),
+                       radial-gradient(60% 30% at 0% 0%,rgba(255,138,76,.14),transparent 70%),var(--bg);
+            background-attachment:fixed}
+          h1{display:flex;align-items:center;gap:10px;font-size:22px;margin:2px 2px 14px}
+          h1 img{width:44px;height:44px;border-radius:13px;box-shadow:0 6px 18px rgba(0,0,0,.35)}
+          h1 span{background:linear-gradient(90deg,#ff8a4c,#f05ae8 50%,#4cc3ff);-webkit-background-clip:text;background-clip:text;color:transparent;font-weight:800}
+          h3{margin:20px 4px 6px;color:var(--mu);font-size:14px;font-weight:700;letter-spacing:.3px}
+          .btn{display:block;width:100%;border:0;border-radius:16px;padding:14px;margin:8px 0;font:inherit;font-weight:700;color:#fff;
+            background:linear-gradient(135deg,#3aa8ff,#9a5cff 55%,#f05ae8);box-shadow:0 8px 22px rgba(154,92,255,.30);transition:transform .15s,opacity .15s}
+          .btn:active{transform:scale(.97);opacity:.92}
+          .btn.s{background:rgba(255,255,255,.07);border:1px solid var(--line);box-shadow:none}
+          .card{display:flex;align-items:center;gap:12px;background:rgba(255,255,255,.06);border:1px solid var(--line);border-radius:20px;padding:12px 14px;margin:9px 0;transition:transform .15s,background .2s}
+          .card:active{transform:scale(.985)}
+          .card .t{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+          .card small{display:block;color:var(--mu);margin-top:2px}
+          .ic{border:0;border-radius:13px;width:40px;height:40px;font-size:17px;background:rgba(240,80,110,.16);color:var(--tx);flex-shrink:0}
+          .ic.rename{background:rgba(76,195,255,.16)}
+          .cur{border-color:rgba(76,195,255,.55);background:linear-gradient(135deg,rgba(76,195,255,.16),rgba(240,90,232,.12));box-shadow:0 6px 22px rgba(76,195,255,.16)}
+          .note{color:var(--mu);font-size:13px;padding:8px 4px}
+          </style>
+          </head>
+          <body>
+          <h1><img src="logo.png" alt=""><span>مشغّل الدراسة</span></h1>
+          <div id="app"></div>
+          <script>
+          let S;
+          try { S = JSON.parse(localStorage.getItem('st') || 'null'); } catch (e) { S = null; }
+          if (!S) { try { const bk = Android.loadState(); if (bk) S = JSON.parse(bk); } catch (e) { S = null; } }
+          if (!S) S = {lists:[],last:null,open:null};
+          if (!S.pos) S.pos = {};
+          S.open = null;
+          let target = null;
+          const save = () => { const j = JSON.stringify(S); try { localStorage.setItem('st',j); } catch(e){} try { Android.saveState(j); } catch(e){} };
+          const uid = () => Math.random().toString(36).slice(2,9);
+          const L = id => S.lists.find(l => l.id == id);
+          const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+          const fmt = ms => Math.floor(ms/60000)+':'+String(Math.floor(ms/1000)%60).padStart(2,'0');
+          function addNew(){target=null;Android.pick();}
+          function addTo(id){target=id;Android.pick();}
+          function addFolder(){target=null;Android.pickFolder();}
+          function addFolderTo(id){target=id;Android.pickFolder();}
+          function onFolderPicked(r){
+            const tr=(r.tracks||[]).map(x=>({id:uid(),name:x.name,uri:x.uri}));
+            if(!tr.length)return;
+            const l=target&&L(target);
+            if(l){const have=new Set(l.tracks.map(t=>t.uri));l.tracks.push(...tr.filter(t=>!have.has(t.uri)));}
+            else S.lists.push({id:uid(),name:r.folder||'مجلد',tracks:tr});
+            save();render();
+          }
+          function onPicked(a){
+            if(!a.length)return;
+            const tr=a.map(x=>({id:uid(),name:x.name,uri:x.uri}));
+            if(target&&L(target))L(target).tracks.push(...tr);
+            else S.lists.push({id:uid(),name:a.length>1?'قائمة '+(S.lists.length+1):tr[0].name,tracks:tr});
+            save();render();
+          }
+          function play(lid,tid,pos){
+            const l=L(lid);if(!l)return;
+            const i=l.tracks.findIndex(t=>t.id==tid);if(i<0)return;
+            S.last={l:lid,t:tid,pos:pos||0};save();
+            Android.play(JSON.stringify(l.tracks.map(t=>({uri:t.uri,name:t.name}))),i,pos||0);
+            render();
+          }
+          function tap(lid,tid){play(lid,tid,(S.pos&&S.pos[tid])||(S.last&&S.last.t==tid?S.last.pos:0));}
+          function resume(){const x=S.last;if(x&&L(x.l))play(x.l,x.t,x.pos);}
+          function openL(id){S.open=id;render();}
+          function renameL(id){
+            const l=L(id);if(!l)return;
+            const n=prompt('اكتب الاسم الجديد لقائمة التشغيل:',l.name);
+            if(n===null)return;
+            const v=n.trim();
+            if(!v){alert('اكتب اسمًا غير فارغ.');return;}
+            l.name=v;save();render();
+          }
+          function delL(id){
+            if(!confirm('حذف القائمة؟'))return;
+            S.lists=S.lists.filter(l=>l.id!=id);save();render();
+          }
+          function delT(lid,tid){
+            const l=L(lid);if(!l)return;
+            l.tracks=l.tracks.filter(t=>t.id!=tid);save();render();
+          }
+          function goBack(){
+            if(S.open){S.open=null;render();return false;}
+            return true;
+          }
+          function render(){
+            const a=document.getElementById('app');
+            if(!S.open){
+              const x=S.last&&L(S.last.l);
+              a.innerHTML='<button class="btn" onclick="addNew()">＋ إضافة صوتية / قائمة جديدة</button>'+
+                '<button class="btn" onclick="addFolder()">📂 إضافة مجلد كامل</button>'+
+                (x?`<button class="btn s" onclick="resume()">▶ متابعة آخر صوتية (${fmt(S.last.pos)})</button>`:'')+
+                '<h3>قوائم التشغيل</h3>'+
+                (S.lists.map(l=>`<div class="card${S.last&&S.last.l==l.id?' cur':''}" onclick="openL('${l.id}')"><span style="font-size:24px">📁</span><div class="t">${esc(l.name)}<small>${l.tracks.length} ملف</small></div><button class="ic rename" title="إعادة تسمية" onclick="event.stopPropagation();renameL('${l.id}')">✏️</button><button class="ic" title="حذف القائمة" onclick="event.stopPropagation();delL('${l.id}')">🗑</button></div>`).join('')||'<div class="note">لا توجد قوائم بعد. أضف صوتياتك للبدء.</div>');
+            }else{
+              const l=L(S.open);
+              if(!l){S.open=null;render();return;}
+              a.innerHTML='<button class="btn s" onclick="goBack()">→ رجوع</button>'+
+                `<h3>📁 ${esc(l.name)}</h3>`+
+                `<button class="btn s" onclick="renameL('${l.id}')">✏️ إعادة تسمية قائمة التشغيل</button>`+
+                `<button class="btn" onclick="addTo('${l.id}')">＋ إضافة ملفات للقائمة</button>`+
+                `<button class="btn" onclick="addFolderTo('${l.id}')">📂 إضافة مجلد كامل للقائمة</button>`+
+                (l.tracks.map(t=>`<div class="card${S.last&&S.last.t==t.id?' cur':''}" onclick="tap('${l.id}','${t.id}')"><span style="font-size:22px">🎵</span><div class="t">${esc(t.name)}</div><button class="ic" onclick="event.stopPropagation();delT('${l.id}','${t.id}')">🗑</button></div>`).join('')||'<div class="note">القائمة فارغة.</div>');
+            }
+          }
+          setInterval(()=>{
+            try{
+              const s=JSON.parse(Android.state());if(!s.uri)return;
+              for(const l of S.lists){
+                const t=l.tracks.find(t=>t.uri==s.uri);
+                if(t){
+                  const ch=!S.last||S.last.t!=t.id;
+                  S.last={l:l.id,t:t.id,pos:s.pos};if(!S.pos)S.pos={};S.pos[t.id]=(s.dur&&s.pos>s.dur-3000)?0:s.pos;save();
+                  if(ch)render();
+                  return;
+                }
+              }
+            }catch(e){}
+          },1000);
+          render();
+          </script>
+          </body>
+          </html>
+          EOF
+      - name: Build debug APK
+        working-directory: proj
+        run: gradle assembleDebug --no-daemon --stacktrace
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FloatPlayer-APK
+          path: proj/app/build/outputs/apk/debug/app-debug.apk
+      - name: Publish APK to Releases
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "v${{ github.run_number }}" proj/app/build/outputs/apk/debug/app-debug.apk --title "FloatPlayer v${{ github.run_number }}" --notes "ملف التثبيت app-debug.apk"
