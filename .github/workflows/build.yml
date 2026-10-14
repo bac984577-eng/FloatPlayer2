@@ -653,6 +653,7 @@ jobs:
           import android.net.Uri
           import android.os.Build
           import android.os.Bundle
+          import android.provider.DocumentsContract
           import android.provider.OpenableColumns
           import android.provider.Settings
           import android.webkit.JavascriptInterface
@@ -668,7 +669,8 @@ jobs:
               override fun onCreate(b: Bundle?) {
                   super.onCreate(b)
                   val skipAuto = intent?.getBooleanExtra("pickForQueue", false) == true ||
-                      intent?.getBooleanExtra("showLists", false) == true
+                      intent?.getBooleanExtra("showLists", false) == true ||
+            intent?.getBooleanExtra("pickFolderForQueue", false) == true
                   if (!skipAuto && hasSavedPlayer() && Settings.canDrawOverlays(this)) {
                       try {
                           val s = Intent(this, PlayerService::class.java)
@@ -692,6 +694,10 @@ jobs:
                       intent.removeExtra("pickForQueue")
                       web.post { openPicker(8) }
                   }
+                  if (intent?.getBooleanExtra("pickFolderForQueue", false) == true) {
+                      intent.removeExtra("pickFolderForQueue")
+                      web.post { openFolderPicker(10) }
+                  }
                   if (Build.VERSION.SDK_INT >= 33) {
                       requestPermissions(arrayOf("android.permission.POST_NOTIFICATIONS"), 1)
                   }
@@ -704,6 +710,108 @@ jobs:
                       intent.removeExtra("pickForQueue")
                       web.post { openPicker(8) }
                   }
+                  if (intent?.getBooleanExtra("pickFolderForQueue", false) == true) {
+                      intent.removeExtra("pickFolderForQueue")
+                      web.post { openFolderPicker(10) }
+                  }
+              }
+
+              private fun openFolderPicker(requestCode: Int) {
+                  val i = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
+                  i.addFlags(
+                      Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                      Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+                  )
+                  startActivityForResult(i, requestCode)
+              }
+
+              private fun isAudioName(n: String): Boolean {
+                  val e = n.substringAfterLast('.', "").lowercase()
+                  return e in setOf("mp3", "m4a", "aac", "wav", "ogg", "opus", "flac", "wma", "amr", "mka")
+              }
+
+              private fun naturalCompare(a: String, b: String): Int {
+                  var i = 0
+                  var j = 0
+                  while (i < a.length && j < b.length) {
+                      if (a[i].isDigit() && b[j].isDigit()) {
+                          var si = i
+                          while (si < a.length && a[si].isDigit()) si++
+                          var sj = j
+                          while (sj < b.length && b[sj].isDigit()) sj++
+                          val na = a.substring(i, si).trimStart('0')
+                          val nb = b.substring(j, sj).trimStart('0')
+                          if (na.length != nb.length) return na.length - nb.length
+                          val c = na.compareTo(nb)
+                          if (c != 0) return c
+                          i = si
+                          j = sj
+                      } else {
+                          val c = a[i].lowercaseChar().compareTo(b[j].lowercaseChar())
+                          if (c != 0) return c
+                          i++
+                          j++
+                      }
+                  }
+                  return (a.length - i) - (b.length - j)
+              }
+
+              private fun scanFolder(tree: Uri, docId: String, out: ArrayList<Pair<String, String>>, depth: Int) {
+                  val kids = ArrayList<Triple<String, String, String>>()
+                  val children = DocumentsContract.buildChildDocumentsUriUsingTree(tree, docId)
+                  contentResolver.query(
+                      children,
+                      arrayOf(
+                          DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+                          DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+                          DocumentsContract.Document.COLUMN_MIME_TYPE
+                      ),
+                      null, null, null
+                  )?.use { c ->
+                      while (c.moveToNext()) {
+                          kids.add(Triple(c.getString(0) ?: "", c.getString(1) ?: "", c.getString(2) ?: ""))
+                      }
+                  }
+                  kids.sortWith(Comparator { a, b -> naturalCompare(a.second, b.second) })
+                  for ((id, name, mime) in kids) {
+                      if (mime == DocumentsContract.Document.MIME_TYPE_DIR) {
+                          if (depth < 6) scanFolder(tree, id, out, depth + 1)
+                      } else if (mime.startsWith("audio/") || isAudioName(name)) {
+                          out.add(DocumentsContract.buildDocumentUriUsingTree(tree, id).toString() to name)
+                      }
+                  }
+              }
+
+              private fun handleFolder(rc: Int, tree: Uri) {
+                  try {
+                      contentResolver.takePersistableUriPermission(tree, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                  } catch (_: Exception) {}
+                  Toast.makeText(this, "جارٍ فحص المجلد...", Toast.LENGTH_SHORT).show()
+                  Thread {
+                      val found = ArrayList<Pair<String, String>>()
+                      var folder = ""
+                      try {
+                          val rootId = DocumentsContract.getTreeDocumentId(tree)
+                          folder = rootId.substringAfterLast('/').substringAfterLast(':')
+                          scanFolder(tree, rootId, found, 0)
+                      } catch (_: Exception) {}
+                      val arr = JSONArray()
+                      for (f in found) {
+                          arr.put(JSONObject().put("uri", f.first).put("name", f.second.substringBeforeLast('.')))
+                      }
+                      runOnUiThread {
+                          if (arr.length() == 0) {
+                              Toast.makeText(this, "لا توجد ملفات صوتية في هذا المجلد", Toast.LENGTH_LONG).show()
+                          } else if (rc == 10) {
+                              PlayerService.inst?.appendTracks(arr)
+                          } else {
+                              val r = JSONObject()
+                                  .put("folder", if (folder.isEmpty()) "مجلد" else folder)
+                                  .put("tracks", arr)
+                              web.evaluateJavascript("onFolderPicked(" + r.toString() + ")", null)
+                          }
+                      }
+                  }.start()
               }
 
               private fun hasSavedPlayer(): Boolean = try {
@@ -744,6 +852,11 @@ jobs:
               @Deprecated("Deprecated in Android")
               override fun onActivityResult(rc: Int, res: Int, d: Intent?) {
                   super.onActivityResult(rc, res, d)
+                  if (rc == 9 || rc == 10) {
+                      val tree = d?.data
+                      if (res == RESULT_OK && tree != null) handleFolder(rc, tree)
+                      return
+                  }
                   if ((rc == 7 || rc == 8) && res == RESULT_OK && d != null) {
                       val uris = ArrayList<Uri>()
                       val cd = d.clipData
@@ -771,6 +884,11 @@ jobs:
                   @JavascriptInterface
                   fun pick() {
                       runOnUiThread { openPicker(7) }
+                  }
+
+                  @JavascriptInterface
+                  fun pickFolder() {
+                      runOnUiThread { openFolderPicker(9) }
                   }
 
                   @JavascriptInterface
@@ -947,6 +1065,15 @@ jobs:
               private var timerEnd = 0L
               private var timerEot = false
               private var persistTick = 0
+              private var trackTapIdx = -1
+              private var trackTapCount = 0
+              private var trackTapTime = 0L
+              private val plLabels = HashMap<Int, TextView>()
+              private val resetMark = Runnable {
+                  trackTapIdx = -1
+                  trackTapCount = 0
+                  for ((k, v) in plLabels) v.text = trackLabel(k)
+              }
               private val prefs by lazy { getSharedPreferences("fp", Context.MODE_PRIVATE) }
               private var queue = JSONArray()
               private var idx = 0
@@ -1346,6 +1473,7 @@ jobs:
                   }
                   hideSpeedPanel()
                   hideTimerPanel()
+                  plLabels.clear()
                   val root = LinearLayout(this)
                   root.orientation = LinearLayout.VERTICAL
                   root.setPadding(dp(12), dp(10), dp(12), dp(10))
@@ -1363,11 +1491,20 @@ jobs:
                       setPadding(dp(4), 0, dp(4), dp(8))
                   }
                   root.addView(title, LinearLayout.LayoutParams(-1, dp(36)))
+                  val hint = TextView(this).apply {
+                      text = "اضغط على الصوتية ثلاث مرات لتشغيلها"
+                      textSize = 11f
+                      setTextColor(Color.rgb(159, 176, 220))
+                      setPadding(dp(4), 0, dp(4), dp(6))
+                  }
+                  root.addView(hint, LinearLayout.LayoutParams(-1, -2))
                   val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-                  val add = panelButton("＋ إضافة", "#2F8CF0") { requestAddTrack() }
+                  val add = panelButton("＋ ملفات", "#2F8CF0") { requestAddTrack() }
+                  val folder = panelButton("مجلد", "#1FA37A") { requestAddFolder() }
                   val lists = panelButton("القوائم", "#8B5CF6") { openLists() }
                   val close = panelButton("إغلاق", "#2A3566") { hidePlaylistPanel() }
                   actions.addView(add, LinearLayout.LayoutParams(0, dp(42), 1f).apply { marginEnd = dp(6) })
+                  actions.addView(folder, LinearLayout.LayoutParams(0, dp(42), 1f).apply { marginEnd = dp(6) })
                   actions.addView(lists, LinearLayout.LayoutParams(0, dp(42), 1f).apply { marginEnd = dp(6) })
                   actions.addView(close, LinearLayout.LayoutParams(0, dp(42), 1f))
                   root.addView(actions, LinearLayout.LayoutParams(-1, dp(42)).apply { bottomMargin = dp(8) })
@@ -1379,13 +1516,15 @@ jobs:
                           orientation = LinearLayout.HORIZONTAL
                           gravity = Gravity.CENTER_VERTICAL
                           setPadding(dp(6), dp(4), dp(6), dp(4))
+                          setOnClickListener { tapTrack(i) }
                           background = GradientDrawable().apply {
                               setColor(if (i == idx) Color.rgb(46, 66, 150) else Color.rgb(25, 38, 82))
                               cornerRadius = dp(12).toFloat()
                           }
                       }
                       val label = TextView(this).apply {
-                          text = (if (i == idx) "▶  " else "") + (i + 1) + ". " + item.optString("name", "صوتية")
+                          text = trackLabel(i)
+                          plLabels[i] = this
                           setTextColor(Color.WHITE)
                           textSize = 12f
                           maxLines = 2
@@ -1644,6 +1783,43 @@ jobs:
                       startActivity(i)
                   } catch (_: Exception) {
                       Toast.makeText(this, "افتح التطبيق للوصول إلى القوائم", Toast.LENGTH_SHORT).show()
+                  }
+              }
+
+              fun trackLabel(i: Int): String {
+                  val name = queue.optJSONObject(i)?.optString("name", "صوتية") ?: "صوتية"
+                  return (if (i == idx) "▶  " else "") + (i + 1) + ". " + name
+              }
+
+              fun tapTrack(i: Int) {
+                  val now = SystemClock.uptimeMillis()
+                  if (i == trackTapIdx && now - trackTapTime <= 700L) {
+                      trackTapCount++
+                  } else {
+                      trackTapIdx = i
+                      trackTapCount = 1
+                  }
+                  trackTapTime = now
+                  h.removeCallbacks(resetMark)
+                  if (trackTapCount >= 3) {
+                      trackTapIdx = -1
+                      trackTapCount = 0
+                      playAt(i, 0)
+                      return
+                  }
+                  plLabels[i]?.text = trackLabel(i) + "   " + "●".repeat(trackTapCount) + "○".repeat(3 - trackTapCount)
+                  h.postDelayed(resetMark, 700L)
+              }
+
+              fun requestAddFolder() {
+                  hidePlaylistPanel()
+                  try {
+                      val i = Intent(this, MainActivity::class.java)
+                      i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                      i.putExtra("pickFolderForQueue", true)
+                      startActivity(i)
+                  } catch (_: Exception) {
+                      Toast.makeText(this, "افتح التطبيق لإضافة مجلد", Toast.LENGTH_SHORT).show()
                   }
               }
 
@@ -2202,106 +2378,5 @@ jobs:
           let S;
           try { S = JSON.parse(localStorage.getItem('st') || 'null'); } catch (e) { S = null; }
           if (!S) { try { const bk = Android.loadState(); if (bk) S = JSON.parse(bk); } catch (e) { S = null; } }
-          if (!S) S = {lists:[],last:null,open:null};
-          if (!S.pos) S.pos = {};
-          S.open = null;
-          let target = null;
-          const save = () => { const j = JSON.stringify(S); try { localStorage.setItem('st',j); } catch(e){} try { Android.saveState(j); } catch(e){} };
-          const uid = () => Math.random().toString(36).slice(2,9);
-          const L = id => S.lists.find(l => l.id == id);
-          const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-          const fmt = ms => Math.floor(ms/60000)+':'+String(Math.floor(ms/1000)%60).padStart(2,'0');
-
-          function addNew(){target=null;Android.pick();}
-          function addTo(id){target=id;Android.pick();}
-          function onPicked(a){
-            if(!a.length)return;
-            const tr=a.map(x=>({id:uid(),name:x.name,uri:x.uri}));
-            if(target&&L(target))L(target).tracks.push(...tr);
-            else S.lists.push({id:uid(),name:a.length>1?'قائمة '+(S.lists.length+1):tr[0].name,tracks:tr});
-            save();render();
-          }
-          function play(lid,tid,pos){
-            const l=L(lid);if(!l)return;
-            const i=l.tracks.findIndex(t=>t.id==tid);if(i<0)return;
-            S.last={l:lid,t:tid,pos:pos||0};save();
-            Android.play(JSON.stringify(l.tracks.map(t=>({uri:t.uri,name:t.name}))),i,pos||0);
-            render();
-          }
-          function tap(lid,tid){play(lid,tid,(S.pos&&S.pos[tid])||(S.last&&S.last.t==tid?S.last.pos:0));}
-          function resume(){const x=S.last;if(x&&L(x.l))play(x.l,x.t,x.pos);}
-          function openL(id){S.open=id;render();}
-          function renameL(id){
-            const l=L(id);if(!l)return;
-            const n=prompt('اكتب الاسم الجديد لقائمة التشغيل:',l.name);
-            if(n===null)return;
-            const v=n.trim();
-            if(!v){alert('اكتب اسمًا غير فارغ.');return;}
-            l.name=v;save();render();
-          }
-          function delL(id){
-            if(!confirm('حذف القائمة؟'))return;
-            S.lists=S.lists.filter(l=>l.id!=id);save();render();
-          }
-          function delT(lid,tid){
-            const l=L(lid);if(!l)return;
-            l.tracks=l.tracks.filter(t=>t.id!=tid);save();render();
-          }
-          function goBack(){
-            if(S.open){S.open=null;render();return false;}
-            return true;
-          }
-          function render(){
-            const a=document.getElementById('app');
-            if(!S.open){
-              const x=S.last&&L(S.last.l);
-              a.innerHTML='<button class="btn" onclick="addNew()">＋ إضافة صوتية / قائمة جديدة</button>'+
-                (x?`<button class="btn s" onclick="resume()">▶ متابعة آخر صوتية (${fmt(S.last.pos)})</button>`:'')+
-                '<h3>قوائم التشغيل</h3>'+
-                (S.lists.map(l=>`<div class="card${S.last&&S.last.l==l.id?' cur':''}" onclick="openL('${l.id}')"><span style="font-size:24px">📁</span><div class="t">${esc(l.name)}<small>${l.tracks.length} ملف</small></div><button class="ic rename" title="إعادة تسمية" onclick="event.stopPropagation();renameL('${l.id}')">✏️</button><button class="ic" title="حذف القائمة" onclick="event.stopPropagation();delL('${l.id}')">🗑</button></div>`).join('')||'<div class="note">لا توجد قوائم بعد. أضف صوتياتك للبدء.</div>');
-            }else{
-              const l=L(S.open);
-              if(!l){S.open=null;render();return;}
-              a.innerHTML='<button class="btn s" onclick="goBack()">→ رجوع</button>'+
-                `<h3>📁 ${esc(l.name)}</h3>`+
-                `<button class="btn s" onclick="renameL('${l.id}')">✏️ إعادة تسمية قائمة التشغيل</button>`+
-                `<button class="btn" onclick="addTo('${l.id}')">＋ إضافة ملفات للقائمة</button>`+
-                (l.tracks.map(t=>`<div class="card${S.last&&S.last.t==t.id?' cur':''}" onclick="tap('${l.id}','${t.id}')"><span style="font-size:22px">🎵</span><div class="t">${esc(t.name)}</div><button class="ic" onclick="event.stopPropagation();delT('${l.id}','${t.id}')">🗑</button></div>`).join('')||'<div class="note">القائمة فارغة.</div>');
-            }
-          }
-          setInterval(()=>{
-            try{
-              const s=JSON.parse(Android.state());if(!s.uri)return;
-              for(const l of S.lists){
-                const t=l.tracks.find(t=>t.uri==s.uri);
-                if(t){
-                  const ch=!S.last||S.last.t!=t.id;
-                  S.last={l:l.id,t:t.id,pos:s.pos};if(!S.pos)S.pos={};S.pos[t.id]=(s.dur&&s.pos>s.dur-3000)?0:s.pos;save();
-                  if(ch)render();
-                  return;
-                }
-              }
-            }catch(e){}
-          },1000);
-          render();
-          </script>
-          </body>
-          </html>
-          EOF
-
-      - name: Build debug APK
-        working-directory: proj
-        run: gradle assembleDebug --no-daemon --stacktrace
-
-      - name: Upload APK artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: FloatPlayer-APK
-          path: proj/app/build/outputs/apk/debug/app-debug.apk
-
-      - name: Publish APK to Releases
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release create "v${{ github.run_number }}" proj/app/build/outputs/apk/debug/app-debug.apk --title "FloatPlayer v${{ github.run_number }}" --notes "ملف التثبيت app-debug.apk"
+          if (!S) S = {lists:[],last:nul
+تم اقتطاع المعاينة بسبب كبر حجم الملف
