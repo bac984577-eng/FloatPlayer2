@@ -704,10 +704,26 @@ jobs:
                   try { videoSurface?.release() } catch (_: Exception) {}
                   videoSurface = null
               }
+              private fun syncVideoPanelPosition(bx: Int, by: Int) {
+                  val panel = videoPanel ?: return
+                  val params = panel.layoutParams as? WindowManager.LayoutParams ?: return
+                  val sw = resources.displayMetrics.widthPixels
+                  val sh = resources.displayMetrics.heightPixels
+                  params.x = (bx - dp(60)).coerceIn(0, (sw - dp(300)).coerceAtLeast(0))
+                  params.y = (by - dp(185)).coerceIn(0, (sh - dp(170)).coerceAtLeast(0))
+                  try { wm.updateViewLayout(panel, params) } catch (_: Exception) {}
+              }
               private fun showVideoPanel() {
                   if (videoPanel != null) return
-                  val root = FrameLayout(this)
-                  root.setBackgroundColor(Color.BLACK)
+                  val radius = dp(22).toFloat()
+                  val root = FrameLayout(this).apply {
+                      background = GradientDrawable().apply {
+                          setColor(Color.BLACK)
+                          cornerRadius = radius
+                          setStroke(dp(1), Color.argb(100, 100, 160, 255))
+                      }
+                      clipToOutline = true
+                  }
                   val texture = TextureView(this)
                   texture.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
                       override fun onSurfaceTextureAvailable(st: SurfaceTexture, width: Int, height: Int) {
@@ -1722,6 +1738,7 @@ jobs:
                                       p.x = sx+dx.toInt()
                                       p.y = sy+dy.toInt()
                                       try { svc.wm.updateViewLayout(this, p) } catch (_: Exception) {}
+                                      svc.syncVideoPanelPosition(p.x, p.y)
                                   }
                               }
                           }
